@@ -193,6 +193,67 @@ class PruebasPorBloques(unittest.TestCase):
                 generar_texto_local("gancho corto", num_predict=75),
                 GANCHO_CORTO)
 
+    def test_regresion_quinta_prueba_dos_ganchos_identicos_y_pepe(self):
+        # Fallo observado en la Mac: Ollama repitió el mismo texto de 11 palabras.
+        texto = "Daniel encontró una carta antigua en el viejo cajón de Pepe."
+        self.assertEqual(contar_palabras(texto), 11)
+        prompts = []
+        def simular(prompt, modelo):
+            prompts.append(prompt)
+            return texto
+        salida = ensamblar_por_bloques(original(), generador=simular)
+        self.assertEqual(salida["estado"], "BLOQUE_RECHAZADO_GANCHO")
+        self.assertEqual(len(salida["historial_bloques"]), 2)
+        primeros = salida["historial_bloques"][0]["motivos_rechazo"]
+        segundos = salida["historial_bloques"][1]["motivos_rechazo"]
+        self.assertTrue(any("Extensión" in x for x in primeros))
+        self.assertTrue(any("Pepe" in x for x in primeros))
+        self.assertTrue(any("ayer" in x for x in primeros))
+        self.assertTrue(any("repetida" in x for x in segundos))
+        self.assertNotEqual(prompts[0], prompts[1])
+        self.assertIn("Pepe", prompts[1])
+        self.assertIn("REEMPLAZA", prompts[1])
+        self.assertIsNone(salida["guion"])
+
+    def test_gancho_corto_con_personaje_nuevo_no_es_aceptado(self):
+        falso = "La carta de Pepe apareció ayer."
+        self.assertEqual(contar_palabras(falso), 6)
+        respuestas = iter([falso, GANCHO_CORTO, HISTORIA_CORTA, CIERRE_CORTO])
+        def simular(prompt, modelo):
+            return next(respuestas)
+        salida = ensamblar_por_bloques(original(), generador=simular)
+        self.assertEqual(len(salida["historial_bloques"]), 4)
+        primer = salida["historial_bloques"][0]
+        self.assertTrue(primer["longitud_valida"])
+        self.assertFalse(primer["aceptable_para_ensamblaje"])
+        self.assertTrue(any("Pepe" in x for x in primer["motivos_rechazo"]))
+        self.assertEqual(salida["guion"]["gancho"], GANCHO_CORTO)
+
+    def test_segundo_intento_cambia_temperatura_y_conserva_limites(self):
+        texto = "Daniel encontró una carta antigua en el viejo cajón de Pepe."
+        cuerpos = []
+        class Respuesta:
+            def __enter__(self):
+                return self
+            def __exit__(self, *args):
+                return False
+            def read(self):
+                return json.dumps({
+                    "response": json.dumps({"texto": texto})
+                }).encode("utf-8")
+        def resolver(request, timeout):
+            cuerpos.append(json.loads(request.data))
+            return Respuesta()
+        with patch("barriga_ia_por_bloques.urlopen", side_effect=resolver):
+            salida = ensamblar_por_bloques(original())
+        self.assertEqual(salida["estado"], "BLOQUE_RECHAZADO_GANCHO")
+        self.assertEqual(len(cuerpos), 2)
+        self.assertEqual(
+            [d["options"]["temperature"] for d in cuerpos], [0.2, 0.65])
+        self.assertEqual(
+            [d["options"]["num_predict"] for d in cuerpos], [75, 75])
+        self.assertNotEqual(cuerpos[0]["prompt"], cuerpos[1]["prompt"])
+
     def test_error_de_ollama_no_se_convierte_en_exito(self):
         def fallar(prompt, modelo):
             raise ErrorNarrativa("Ollama detenido")
