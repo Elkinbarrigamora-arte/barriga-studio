@@ -111,6 +111,17 @@ def servidor(studio, token, puerto, modelo):
                 else:
                     self.send(200, asset.read_text(encoding="utf-8"),
                               "text/javascript; charset=utf-8")
+            elif self.path.startswith("/assets/"):
+                relative = self.path[len("/assets/"):]
+                if (not relative or "/" in relative or "\\" in relative or
+                    relative.startswith(".") or not relative.endswith((".js", ".css"))):
+                    return self.send(404, {"error": "Ruta desconocida"})
+                asset = studio / "assets" / relative
+                if not asset.is_file():
+                    return self.send(404, {"error": "Recurso no encontrado"})
+                content_type = ("text/javascript; charset=utf-8" if relative.endswith(".js")
+                                else "text/css; charset=utf-8")
+                self.send(200, asset.read_text(encoding="utf-8"), content_type)
             elif self.path == "/api/health":
                 self.send(200, {"servidor": "OK", "modelo_solicitado": modelo,
                                 "inferencia_real_comprobada": False,
