@@ -24,8 +24,21 @@ En el apartado **Mis proyectos**, pulsa **Descargar respaldo JSON** y guarda el 
 | `index.html` | Interfaz actual; conserva intactos los controles y datos existentes |
 | `assets/studio-mejoras.js` | Respaldo, restauración, duplicación, eliminación y verificación editorial |
 | `backups/v88/` | Archivos de respaldo históricos del repositorio; no se ejecutan por defecto |
+| `tools/puente_local.py` | Puente experimental local, ejecutado **solo manualmente**, con Ollama en 127.0.0.1:11434 y Studio en 127.0.0.1:8766 |
 
-La integración Ollama/Studio y los diagnósticos se desarrollan y prueban en la rama `test/prueba-previa-nocturna-20261022`. No se considera una funcionalidad completa de `main`.
+El puente **experimental** de guiones con Ollama existe ahora en `main`, pero requiere ejecutarse manualmente y verificar su comportamiento en la Mac. No se inicia al abrir Studio ni constituye todavía sincronización remota, producción audiovisual o funcionalidad desplegada. Las pruebas previas y diagnósticos adicionales permanecen en `test/prueba-previa-nocturna-20261022`.
+
+## Probar el primer puente local sin API de pago
+
+Con el repositorio actualizado y Ollama encendido, desde `barriga-studio`:
+
+```bash
+python3 tools/puente_local.py --studio "$PWD"
+```
+
+Se abre una página **solo local** en `http://127.0.0.1:8766`. Escribe una idea en el campo de guion y pulsa **Completar guion con Barriga IA**. El modelo local devolverá un guion con gancho, historia y oferta/cierre, si responde con JSON válido. `Ctrl+C` detiene el servidor. No se edita `index.html` ni se activa ningún servicio de fondo.
+
+**Pendiente:** comprobar la llamada real en la Mac y la persistencia del guion; esto no genera videos ni voces.
 
 ## Comprobaciones confirmadas en el Mac (prueba aportada por el propietario, 22 oct 2026)
 
