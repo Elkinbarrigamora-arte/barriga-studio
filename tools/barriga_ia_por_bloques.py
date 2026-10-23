@@ -376,6 +376,14 @@ def main():
             "bloqueos": eval_final["bloqueos"] if eval_final else [],
             "advertencias": eval_final["advertencias"] if eval_final else [],
             "incidencia": resultado.get("incidencia"),
+            "ultimo_texto_rechazado": (
+                resultado["historial_bloques"][-1]["texto"][:180]
+                if resultado.get("incidencia") and resultado["historial_bloques"]
+                else None),
+            "motivos_ultimo_rechazo": (
+                resultado["historial_bloques"][-1].get("motivos_rechazo", [])
+                if resultado.get("incidencia") and resultado["historial_bloques"]
+                else []),
             "apto_para_revision_humana": bool(
                 eval_final and eval_final["apto_para_revision_humana"]),
             "archivo_guardado": str(args.salida),
