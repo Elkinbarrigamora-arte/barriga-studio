@@ -11,7 +11,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tools"))
 from barriga_ia_narrativa import ErrorNarrativa, contar_palabras
 from barriga_ia_por_bloques import (
     ensamblar_por_bloques, generar_texto_local, limites_de_bloques,
-    prompt_para_bloque, main,
+    prompt_para_bloque, proponer_gancho_seguro, main,
 )
 
 GANCHO_CORTO = "¡Daniel encontró una carta escrita ayer!"
@@ -275,6 +275,98 @@ class PruebasPorBloques(unittest.TestCase):
                                 for motivo in detalle["motivos_ultimo_rechazo"]))
             self.assertTrue(destino.exists())
             self.assertFalse(detalle["publicacion_automatica_autorizada"])
+
+    def test_regla_de_premisa_es_fiel_y_no_inventa_autor(self):
+        premisa = (
+            "Un hombre encuentra una carta de su hermano desaparecido hace "
+            "treinta años, pero descubre que alguien la escribió ayer"
+        )
+        propuesta = proponer_gancho_seguro(
+            original(), limites_de_bloques(35), premisa=premisa)
+        self.assertEqual(propuesta["texto"],
+                         "¡La carta de su hermano fue escrita ayer!")
+        self.assertEqual(contar_palabras(propuesta["texto"]), 8)
+        self.assertEqual(propuesta["origen"], "REGLA_FIEL_A_PREMISA")
+        self.assertNotIn("Pepe", propuesta["texto"])
+        self.assertNotIn("hermano escribió", propuesta["texto"])
+
+    def test_alternativa_evitar_llamada_de_ollama_para_gancho(self):
+        premisa = (
+            "Un hombre encuentra una carta de su hermano desaparecido hace "
+            "treinta años, pero descubre que alguien la escribió ayer"
+        )
+        llamadas = []
+        respuestas = iter([HISTORIA_CORTA, CIERRE_CORTO])
+        def modelo(prompt, modelo):
+            llamadas.append(prompt)
+            return next(respuestas)
+        antes = original()
+        snapshot = json.dumps(antes, sort_keys=True)
+        resultado = ensamblar_por_bloques(
+            antes, duracion=35, generador=modelo,
+            estrategia_gancho="reglas-primero", premisa=premisa)
+        self.assertEqual(len(llamadas), 2)
+        self.assertEqual(resultado["historial_bloques"][0]["intento"], 0)
+        self.assertEqual(resultado["historial_bloques"][0]["origen"],
+                         "REGLA_FIEL_A_PREMISA")
+        self.assertEqual(resultado["guion"]["gancho"],
+                         "¡La carta de su hermano fue escrita ayer!")
+        self.assertEqual(resultado["estado"], "REVISION_HUMANA_PENDIENTE")
+        self.assertEqual(snapshot, json.dumps(antes, sort_keys=True))
+        self.assertFalse(resultado["publicacion_automatica_autorizada"])
+
+    def test_sin_hechos_suficientes_no_inventa_gancho(self):
+        guion = original()
+        guion["gancho"] = "En el camino sin salida."
+        guion["historia"] = "Un viajero observó unas luces en el cielo."
+        self.assertIsNone(proponer_gancho_seguro(
+            guion, limites_de_bloques(35), premisa="Un viajero encontró luces"))
+        # Se conserva la ruta normal a Ollama cuando no puede deducirlo.
+        consultas = iter([GANCHO_CORTO, HISTORIA_CORTA, CIERRE_CORTO])
+        salida = ensamblar_por_bloques(
+            guion, estrategia_gancho="reglas-primero",
+            premisa="Un viajero encontró luces",
+            generador=lambda prompt, modelo: next(consultas))
+        self.assertEqual(salida["historial_bloques"][0]["intento"], 1)
+        self.assertEqual(salida["guion"]["gancho"], GANCHO_CORTO)
+
+    def test_conservar_salida_anterior_y_reportar_metodo_gancho(self):
+        premisa = (
+            "Un hombre encuentra una carta de su hermano desaparecido hace "
+            "treinta años, pero descubre que alguien la escribió ayer"
+        )
+        with tempfile.TemporaryDirectory() as temp:
+            entrada = Path(temp) / "cuarta-prueba.json"
+            salida = Path(temp) / "septima-prueba.json"
+            datos = json.dumps({"guion": original()}, ensure_ascii=False)
+            entrada.write_text(datos, encoding="utf-8")
+            argv = ["por_bloques.py", "--revisar-archivo", str(entrada),
+                    "--salida", str(salida), "--estrategia-gancho",
+                    "reglas-primero", "--premisa", premisa]
+            with patch("sys.argv", argv):
+                with patch("barriga_ia_por_bloques.generar_texto_local",
+                           side_effect=[HISTORIA_CORTA, CIERRE_CORTO]) as modelo:
+                    with patch("sys.stdout", new_callable=io.StringIO) as out:
+                        code = main()
+            self.assertEqual(code, 0)
+            self.assertEqual(modelo.call_count, 2)
+            informe = json.loads(out.getvalue())
+            self.assertEqual(informe["numero_llamadas_ollama"], 2)
+            self.assertEqual(informe["metodo_gancho"], "REGLA_FIEL_A_PREMISA")
+            self.assertEqual(entrada.read_text(encoding="utf-8"), datos)
+            guardado = json.loads(salida.read_text(encoding="utf-8"))
+            self.assertEqual(guardado["historial_bloques"][0]["origen"],
+                             "REGLA_FIEL_A_PREMISA")
+            self.assertFalse(guardado["publicacion_automatica_autorizada"])
+
+    def test_premisa_invalida_se_rechaza_sin_usar_ollama(self):
+        with self.assertRaises(ErrorNarrativa):
+            proponer_gancho_seguro(
+                original(), limites_de_bloques(35), premisa="ayer")
+        with self.assertRaises(ErrorNarrativa):
+            ensamblar_por_bloques(
+                original(), estrategia_gancho="reglas-primero",
+                premisa="x", generador=lambda prompt, modelo: "nunca")
 
     def test_error_de_ollama_no_se_convierte_en_exito(self):
         def fallar(prompt, modelo):
