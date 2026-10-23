@@ -59,8 +59,11 @@ def detectar_problemas_editoriales(texto, original, bloque, anterior=None):
     for ficha in original.get("personajes", []):
         if isinstance(ficha, dict):
             original_texto += " " + str(ficha.get("nombre", ""))
+    # Ignorar mayúsculas dentro de citas: son diálogos o texto de la carta,
+    # no necesariamente nombres de personajes.
+    sin_citas = re.sub(r"([\x27\x22“‘])(?:(?!\1).)*?([\x27\x22”’])", lambda m: " " * len(m.group()), texto)
     # Solo flaggear mayúsculas interiores, no arranques normales de oración.
-    for coincide in re.finditer(r"\b[A-ZÁÉÍÓÚÑ][a-záéíóúñ]{2,}\b", texto):
+    for coincide in re.finditer(r"\b[A-ZÁÉÍÓÚÑ][a-záéíóúñ]{2,}\b", sin_citas):
         posicion = coincide.start()
         antes = texto[:posicion].rstrip()
         if not antes or antes[-1] in ".!?¡¿:;":
