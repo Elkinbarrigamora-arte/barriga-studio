@@ -1,0 +1,9 @@
+{
+  "version": 1,
+  "ordenes": [
+    {"id": "BS-1001", "accion": "diagnostico"},
+    {"id": "BS-1002", "accion": "auditoria_interfaz"},
+    {"id": "BS-1003", "accion": "revision_proyectos"},
+    {"id": "BS-1004", "accion": "pruebas_agente"}
+  ]
+}
