@@ -43,6 +43,35 @@ class AgenteDesarrolloTests(unittest.TestCase):
             agent.plan_changes(self.root, [
                 {'ruta': 'assets/a.js', 'buscar': 'let a=1', 'reemplazar': 'let a=2'}])
 
+    def test_sequential_patches_to_same_existing_file(self):
+        before = (self.root / 'index.html').read_text(encoding='utf-8')
+        changes = [
+            {'ruta': 'index.html', 'buscar': '</body>',
+             'reemplazar': '<script src="assets/proyectos.js"></script></body>'},
+            {'ruta': 'index.html', 'buscar': '<textarea id="script"></textarea>',
+             'reemplazar': '<textarea id="script" data-autosave="1"></textarea>'}
+        ]
+        planned = agent.plan_changes(self.root, changes)
+        self.assertIn('data-autosave="1"', planned['index.html'])
+        self.assertIn('src="assets/proyectos.js"', planned['index.html'])
+        self.assertEqual((self.root / 'index.html').read_text(encoding='utf-8'), before)
+
+    def test_repeated_new_file_is_rejected(self):
+        changes = [
+            {'ruta': 'assets/proyectos.js', 'contenido': 'let a = 1;'},
+            {'ruta': 'assets/proyectos.js', 'contenido': 'let b = 2;'}
+        ]
+        with self.assertRaisesRegex(ValueError, 'Archivo nuevo repetido'):
+            agent.plan_changes(self.root, changes)
+
+    def test_repeated_patch_requires_exact_match_after_previous_patch(self):
+        changes = [
+            {'ruta': 'index.html', 'buscar': '</body>', 'reemplazar': '</main></body>'},
+            {'ruta': 'index.html', 'buscar': '</body>', 'reemplazar': '</footer></body>'},
+        ]
+        planned = agent.plan_changes(self.root, changes)
+        self.assertIn('</main></footer></body>', planned['index.html'])
+
     @unittest.skipUnless(__import__('shutil').which('node'), 'Node.js necesario para validar JS')
     def test_success_creates_backup_and_commit(self):
         output = {'cambios': [
