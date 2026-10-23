@@ -341,11 +341,13 @@ def evaluar_guion(guion, duracion=35):
     }
 
 
-def generar_local(prompt, modelo=MODELO, timeout=180, devolver_ajustes=False):
+def generar_local(prompt, modelo=MODELO, timeout=180, devolver_ajustes=False,
+                  temperatura=0.7):
     """Solo consulta el servicio local de Ollama; no usa proveedores remotos."""
     payload = {
         "model": modelo, "prompt": prompt, "stream": False, "format": ESQUEMA_JSON,
-        "options": {"temperature": 0.7, "num_ctx": 8192, "num_predict": 1100},
+        "options": {"temperature": temperatura, "num_ctx": 8192,
+                    "num_predict": 1100},
     }
     req = Request(OLLAMA_URL,
                   json.dumps(payload, ensure_ascii=False).encode("utf-8"),
@@ -364,36 +366,169 @@ def generar_local(prompt, modelo=MODELO, timeout=180, devolver_ajustes=False):
         raise ErrorNarrativa("Ollama no devolvió JSON válido") from exc
 
 
+def preparar_revision(guion, evaluacion, duracion=35, premisa=None):
+    """Pide a Ollama reescribir, no cortar texto arbitrariamente."""
+    if not isinstance(guion, dict) or not isinstance(evaluacion, dict):
+        raise ErrorNarrativa("Se requiere un guion evaluado para revisarlo")
+    objetivo = round(duracion * 2.5)
+    minimo = round(objetivo * 0.90)
+    maximo = round(objetivo * 1.10)
+    datos = {
+        "tarea": "REESCRIBIR UN BORRADOR DEMASIADO LARGO EN ESPANOL LATINOAMERICANO",
+        "duracion_objetivo_segundos": duracion,
+        "palabras_actuales": evaluacion.get("palabras"),
+        "objetivo_palabras": objetivo,
+        "intervalo_obligatorio_palabras": [minimo, maximo],
+        "presupuesto_por_bloque": {
+            "gancho": round(objetivo * .14),
+            "historia": round(objetivo * .68),
+            "cierre": round(objetivo * .18),
+        },
+        "premisa_original": premisa or "",
+        "nicho_inmutable": guion.get("nicho"),
+        "naturaleza_inmutable": guion.get("naturaleza"),
+        "borrador_previo": guion,
+        "instrucciones": [
+            "Mantener el mismo conflicto, personajes y parentescos",
+            "No reemplazar el conflicto por otra historia ni inventar giros sin preparación",
+            "Mostrar acciones concretas, no generalidades ni moralejas añadidas",
+            "El gancho debe abrir un misterio o conflicto con fuerza",
+            "El cierre debe revelar algo concreto y responder al conflicto",
+            "Eliminar repeticiones, descripciones que no mueven la trama y frases de relleno",
+            "Corregir faltas ortográficas, palabras inventadas y errores gramaticales",
+            "Revisar que gancho + historia + cierre sumen DENTRO del intervalo indicado",
+            "Conservar el formato JSON, personajes como lista y continuidad como objeto",
+            "Conservar nicho y naturaleza originales; fuentes solo si existían",
+        ],
+    }
+    return (SISTEMA
+            + "\nTAREA PRIORITARIA: REESCRIBE y COMPRIME el siguiente borrador. "
+              "No devuelvas explicaciones; solo JSON. Cuenta las palabras de "
+              "gancho, historia y cierre ANTES de responder. "
+              "NO copies el borrador entero a los tres campos.\n"
+            + json.dumps(datos, ensure_ascii=False, sort_keys=True))
+
+
+def revisar_borrador_local(guion, duracion=35, modelo=MODELO,
+                          max_revisiones=2, premisa=None):
+    """Máximo dos revisiones con Ollama; preserva cada intento para auditoría.
+
+    Solo reescribe ficción o dramatización si el problema es la duración.
+    El estado de aprobación permanece reservado a revisión humana.
+    """
+    if type(max_revisiones) is not int or not 0 <= max_revisiones <= 2:
+        raise ErrorNarrativa("Máximo de revisiones permitido: de 0 a 2")
+    guion, ajustes = normalizar_formato(guion)
+    historial = []
+    advertencia_proceso = None
+    original_nicho = guion.get("nicho")
+    original_naturaleza = guion.get("naturaleza")
+    for intento in range(max_revisiones + 1):
+        evaluacion = evaluar_guion(guion, duracion)
+        historial.append({
+            "intento": intento + 1,
+            "guion": guion,
+            "evaluacion": evaluacion,
+            "ajustes_de_formato": ajustes,
+        })
+        requiere_longitud = any(
+            mensaje.startswith("Duración incompatible")
+            for mensaje in evaluacion["bloqueos"])
+        if evaluacion["apto_para_revision_humana"] or not requiere_longitud:
+            break
+        if original_naturaleza == "factual":
+            advertencia_proceso = (
+                "No se reescriben hechos reales automáticamente; comprobar fuentes")
+            break
+        if intento >= max_revisiones:
+            advertencia_proceso = (
+                "Se agotó el máximo de revisiones locales; requiere corrección humana")
+            break
+        prompt = preparar_revision(guion, evaluacion, duracion, premisa)
+        try:
+            nuevo, cambios = generar_local(
+                prompt, modelo=modelo, devolver_ajustes=True, temperatura=0.25)
+            if (nuevo.get("nicho") != original_nicho
+                    or nuevo.get("naturaleza") != original_naturaleza):
+                advertencia_proceso = (
+                    "Ollama cambió el nicho o la naturaleza; revisión descartada")
+                break
+            # Revisar antes de incorporarlo; no sustituir el borrador por JSON inválido.
+            evaluar_guion(nuevo, duracion)
+        except (ErrorNarrativa, ValueError, OSError) as exc:
+            advertencia_proceso = (
+                "La reescritura no fue válida; conservado el último borrador: "
+                + str(exc))
+            break
+        guion, ajustes = nuevo, cambios
+
+    return {
+        "guion": guion,
+        "evaluacion": evaluacion,
+        "historial_intentos": historial,
+        "intentos_realizados": len(historial),
+        "revision_automatica_local": len(historial) > 1,
+        "incidencia_reescritura": advertencia_proceso,
+        "ajustes_de_formato": ajustes,
+        "publicacion_automatica_autorizada": False,
+    }
+
+
+def leer_guion_guardado(ruta):
+    """Extrae guion desde un JSON crudo o un informe previo sin editarlo."""
+    datos = json.loads(Path(ruta).read_text(encoding="utf-8"))
+    if isinstance(datos, dict) and isinstance(datos.get("guion"), dict):
+        datos = datos["guion"]
+    guion, _ = normalizar_formato(datos)
+    return guion
+
+
 def main():
     p = argparse.ArgumentParser(description=__doc__)
     modo = p.add_mutually_exclusive_group(required=True)
     modo.add_argument("--tema", help="Generar con Ollama local")
     modo.add_argument("--evaluar", type=Path, help="Evaluar un JSON sin conectar a Ollama")
+    modo.add_argument("--revisar-archivo", type=Path,
+                      help="Reescribir un guion anterior sin borrar el original")
     p.add_argument("--nicho", choices=sorted(NICHOS), default="leyendas")
     p.add_argument("--naturaleza", choices=NATURALEZAS, default="ficcion")
     p.add_argument("--duracion", type=int, default=35)
     p.add_argument("--fuente", action="append", default=[])
     p.add_argument("--biblia", type=Path)
     p.add_argument("--modelo", default=MODELO)
+    p.add_argument("--max-revisiones", type=int, default=2,
+                   help="Máximo de reescrituras locales adicionales (0 a 2)")
     p.add_argument("--salida", type=Path,
                    help="Guardar resultado local; NO guardar archivos privados en Git")
     args = p.parse_args()
     try:
         if args.evaluar:
-            cargado = json.loads(args.evaluar.read_text(encoding="utf-8"))
-            # Admite tanto un guion puro como una salida previamente guardada.
-            if isinstance(cargado, dict) and isinstance(cargado.get("guion"), dict):
-                cargado = cargado["guion"]
-            guion, ajustes = normalizar_formato(cargado)
+            guion = leer_guion_guardado(args.evaluar)
+            resultado = {
+                "guion": guion,
+                "evaluacion": evaluar_guion(guion, args.duracion),
+                "ajustes_de_formato": [],
+            }
         else:
-            biblia = json.loads(args.biblia.read_text(encoding="utf-8")) if args.biblia else None
-            prompt = preparar_solicitud(args.tema, args.nicho, args.naturaleza,
-                                        args.duracion, args.fuente, biblia)
-            guion, ajustes = generar_local(prompt, modelo=args.modelo,
-                                          devolver_ajustes=True)
-        resultado = {"guion": guion, "evaluacion": evaluar_guion(guion, args.duracion),
-                     "ajustes_de_formato": ajustes,
-                     "fecha_revision": datetime.utcnow().isoformat() + "Z"}
+            if args.revisar_archivo:
+                guion = leer_guion_guardado(args.revisar_archivo)
+                if guion.get("nicho") != args.nicho or guion.get("naturaleza") != args.naturaleza:
+                    raise ErrorNarrativa(
+                        "El nicho/naturaleza del archivo no coincide con los argumentos")
+                premisa = None
+            else:
+                biblia = json.loads(args.biblia.read_text(encoding="utf-8")) if args.biblia else None
+                prompt = preparar_solicitud(args.tema, args.nicho, args.naturaleza,
+                                            args.duracion, args.fuente, biblia)
+                guion = generar_local(prompt, modelo=args.modelo)
+                premisa = args.tema
+            resultado = revisar_borrador_local(
+                guion, duracion=args.duracion, modelo=args.modelo,
+                max_revisiones=args.max_revisiones, premisa=premisa)
+            if args.revisar_archivo and args.salida:
+                if args.revisar_archivo.resolve() == args.salida.resolve():
+                    raise ErrorNarrativa("El archivo de salida debe ser distinto al original")
+        resultado["fecha_revision"] = datetime.utcnow().isoformat() + "Z"
         texto = json.dumps(resultado, indent=2, ensure_ascii=False)
         if args.salida:
             destino = args.salida
