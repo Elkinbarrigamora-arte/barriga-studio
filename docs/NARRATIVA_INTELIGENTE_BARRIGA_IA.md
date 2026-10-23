@@ -159,3 +159,57 @@ python3 tools/barriga_ia_narrativa.py \
 Cuando lo devuelva para corrección, no significa que haya fallado Ollama:
 significa que el control editorial detectó un resultado no apto.
 Conservar la primera y la segunda prueba para comparar con la tercera.
+
+
+## Tercera prueba real y nueva reparación v0.4
+
+La tercera ejecución local de Ollama devolvió **205 palabras / 82 segundos**,
+cuando el objetivo era **35 segundos**. El evaluador rechazó correctamente
+el guion con \`DEVOLVER_PARA_CORRECCION\`, pero el modelo no obedeció el
+presupuesto narrativo.
+
+### Solución implementada: ciclo limitado de reescritura
+
+- Se puede cargar el guion **ya generado** sin volver a pedir un texto desde
+  cero ni modificar los archivos previos.
+- Si la duración está fuera del margen aprobado, y se trata de ficción o
+  dramatización, Barriga IA pide **hasta dos reescrituras adicionales a
+  Ollama local** con la premisa narrativa y un presupuesto concreto.
+- Cada intento se evalúa individualmente; se conservan los intentos y los
+  resultados completos en el **nuevo** archivo JSON de salida.
+- Si alguno queda dentro del control estructural se devuelve para revisión
+  editorial humana, sin autorizar publicación.
+- Si ambos intentos adicionales fallan, se conserva el último borrador
+  evaluable, se informa del rechazo y no se simula éxito.
+- **No se reescriben contenidos factuales** automáticamente; requieren
+  comprobación de fuentes y edición humana.
+- Nunca se sobreescribe el JSON de entrada al usar la revisión de archivo;
+  se bloquea una salida que apunte al mismo archivo.
+- No es reentrenamiento del modelo, no tiene navegación web, no genera video,
+  no publica Reels ni promete calidad viral.
+
+### Paso de prueba en Mac
+
+Actualizar la rama experimental dentro del worktree aislado y ejecutar:
+
+~~~sh
+cd "$HOME/Barriga-IA-Pruebas"
+git fetch origin feature/barriga-ia-calendario-30-dias-20261023
+git switch --detach FETCH_HEAD
+python3 tools/barriga_ia_narrativa.py \
+  --revisar-archivo local-data/narrativa/tercera-prueba.json \
+  --nicho leyendas --naturaleza ficcion --duracion 35 \
+  --max-revisiones 2 --resumen \
+  --salida local-data/narrativa/cuarta-prueba.json
+~~~
+
+El terminal muestra un diagnóstico corto con duración estimada,
+número de intentos, bloqueos y advertencias. El JSON de salida conserva
+los borradores e informes de cada paso para auditoría.
+
+Nota: devolver un código de salida 2 por "no apto" es intencional;
+indica revisión humana necesaria, **no un fallo de Mac o de Ollama**.
+
+Limitación: el control de palabras asume unas 150 palabras/minuto.
+Debe cotejarse con la velocidad real de la voz y revisarse semánticamente
+para evitar incoherencias entre personajes, escenas y desenlace.
