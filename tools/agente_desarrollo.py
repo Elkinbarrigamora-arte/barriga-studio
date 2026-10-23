@@ -85,8 +85,16 @@ def ask_model(task, current, model):
         'Devuelve SOLO JSON válido con forma '
         '{"resumen":"...","cambios":[{"ruta":"assets/modulo.js","contenido":"código completo"},'
         '{"ruta":"index.html","buscar":"texto literal único","reemplazar":"texto nuevo"}]}. '
-        'Para archivos NUEVOS usa contenido; para existentes usa buscar y reemplazar literal exacto, '
-        'sin omitir contenido. Hasta TRES cambios por iteración. '
+        'REGLA CRÍTICA OBLIGATORIA: contenido SOLO para rutas que NO EXISTEN EN DISCO; '
+        'NUNCA entregues contenido para assets/escenas.js, assets/editorial.js, index.html '
+        'ni otro archivo existente. Para archivos existentes usa buscar/reemplazar literal exacto. '
+        'Ejemplo de archivo existente: {"ruta":"assets/escenas.js",'
+        '"buscar":"TEXTO EXACTO PRESENTE", "reemplazar":"TEXTO NUEVO"}. '
+        'Ejemplo de archivo nuevo: {"ruta":"assets/proyectos-core.js",'
+        '"contenido":"código JavaScript completo"}. '
+        'Si quieres añadir una funcionalidad extensa, CREA un archivo JS nuevo y '
+        'enlázalo desde index.html mediante un parche exacto en </body>. '
+        'Nunca dupliques rutas en la lista cambios. Hasta TRES cambios por iteración. '
         'No inventes servicios de video, sincronización, voces ni funcionalidades no conectadas. '
         'Solo edita index.html, assets/, docs/ o tests/. '
         'NO propongas cambios de tools/puente_local.py ni de otros archivos tools/. '
@@ -99,7 +107,10 @@ def ask_model(task, current, model):
         'Se verificará sintaxis JS con Node si está disponible. '
         'No generes comandos shell. Responde en español.'
     )
-    prompt = system + '\n\nOBJETIVO DE ESTA ITERACIÓN: ' + task + '\n\nCÓDIGO ACTUAL:\n' + current
+    prompt = (system + '\n\nOBJETIVO DE ESTA ITERACIÓN: ' + task +
+              '\n\nCÓDIGO ACTUAL:\n' + current +
+              '\n\nRECUERDA: antes de escribir JSON, distingue archivos EXISTENTES (buscar/reemplazar) '
+              'de archivos NUEVOS (contenido). No uses contenido para assets/escenas.js.')
     payload = {'model': model, 'prompt': prompt, 'format': 'json', 'stream': False,
                'options': {'temperature': 0.2, 'num_ctx': 16384, 'num_predict': 5000}}
     request = Request(OLLAMA, data=json.dumps(payload).encode('utf-8'),
@@ -217,18 +228,34 @@ def run_stage(root, name, goal, model):
     print('Respaldo Git: ' + backup, flush=True)
     planned = None
     error_feedback = ''
-    for attempt in range(1, 4):
+    max_attempts = 5
+    for attempt in range(1, max_attempts + 1):
         task = goal + error_feedback
         answer = ask_model(task, context(root, task), model)
         try:
             planned = plan_changes(root, answer['cambios'])
             break
         except ValueError as exc:
-            if attempt == 3:
-                raise RuntimeError('Tres propuestas no aplicables; no se editó ningún archivo: ' + str(exc)) from exc
-            print('Parche rechazado (' + str(attempt) + '/3): ' + str(exc) + '. Reintentando...', flush=True)
-            error_feedback = ('\\nATENCIÓN: la propuesta anterior se rechazó: ' + str(exc) +
-                              '. Usa fragmentos literales exactos visibles y rutas permitidas.')
+            if attempt == max_attempts:
+                raise RuntimeError('Cinco propuestas no aplicables; no se editó ningún archivo: ' + str(exc)) from exc
+            print('Parche rechazado (' + str(attempt) + '/' + str(max_attempts) + '): ' + str(exc) + '. Reintentando...', flush=True)
+            message = str(exc)
+            if message.startswith('Para archivo existente usa buscar/reemplazar: '):
+                rejected_path = message.split(': ', 1)[1]
+                advice = ('La ruta ' + rejected_path + ' YA EXISTE. Está PROHIBIDO devolver contenido '
+                          'para ella. Usa buscar/reemplazar exactos o crea un JS NUEVO '
+                          'y agrégalo a index.html con otro parche.')
+            elif message.startswith('El parche no coincide exactamente una vez: '):
+                rejected_path = message.split(': ', 1)[1]
+                advice = ('Tu campo buscar NO aparece exactamente una vez en ' + rejected_path +
+                          '. Copia textualmente una cadena breve y ÚNICA del archivo mostrado, '
+                          'o crea un JS NUEVO y enlázalo con un parche exacto a index.html.')
+            else:
+                advice = ('Usa rutas diferentes y los fragmentos literales presentes '
+                          'en el código actual, sin modificar archivos protegidos.')
+            error_feedback = ('\n\nCORRECCIÓN OBLIGATORIA DEL INTENTO ' + str(attempt) +
+                              ': ' + message + '. ' + advice +
+                              ' Rehaz TODOS los cambios en JSON válido, sin repetir el error.')
     previous = {rel: (root / rel).read_text(encoding='utf-8') if (root / rel).exists() else None
                 for rel in planned}
     try:
