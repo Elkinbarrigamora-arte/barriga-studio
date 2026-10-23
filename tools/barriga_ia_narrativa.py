@@ -35,9 +35,14 @@ SISTEMA = """Eres Barriga IA, guionista de reels cinematográficos en español l
 Tu especialidad es GANCHO -> HISTORIA -> OFERTA O CIERRE.
 La narración es continua; no saludes ni hagas preguntas directas al público.
 El gancho establece un conflicto inmediato sin promesas falsas o clickbait engañoso.
+RESPETA ESTRICTAMENTE el número de palabras objetivo indicado en DATOS DE TRABAJO.
+Nunca alargues el guion con explicaciones generales o repeticiones.
 La historia desarrolla acciones concretas, causa y consecuencia, con ritmo visual.
 El cierre resuelve, sorprende o conmueve. Solo usa una oferta comercial si procede.
 No repitas hechos; mantén personajes, apariencia, ropa y voz entre escenas.
+Las relaciones familiares deben concordar con la premisa: un hermano no se convierte en tío.
+Describe acciones visibles y concretas, no resumas la historia con frases vagas.
+No inventes ubicaciones, vestuario ni personajes de relleno en la ficha continuidad.
 Separa siempre ficción, dramatización y hechos verificables. No inventes fuentes.
 Nunca copies guiones ajenos, incluyas marcas de agua ni pidas suscripciones a pago.
 Respeta derechos de autor y normas de cada plataforma; evita violencia gráfica.
@@ -47,7 +52,7 @@ con campos: titulo, nicho, naturaleza, gancho, historia, cierre, personajes,
 continuidad, fuentes, duracion_objetivo_segundos.
 TIPOS JSON OBLIGATORIOS:
 "personajes": [{"nombre": "Daniel", "descripcion": "hermano mayor"}] o [];
-"continuidad": {"escenario": "Puerto", "vestuario": "ropa azul"} o {};
+"continuidad": {} o ficha SOLO con rasgos verdaderamente presentes en el guion;
 "fuentes": [] para ficción, o lista de referencias aportadas SIN INVENTAR;
 "duracion_objetivo_segundos": número entero, no texto.
 Los tres segmentos de narración deben ser texto, personajes y fuentes listas,
@@ -109,7 +114,22 @@ def preparar_solicitud(tema, nicho, naturaleza="ficcion", duracion=35,
         raise ErrorNarrativa("Miniseries exige una biblia de continuidad")
     if biblia is not None and not isinstance(biblia, dict):
         raise ErrorNarrativa("La biblia de continuidad debe ser un objeto JSON")
+    objetivo_palabras = round(duracion * 2.5)
+    minimo_palabras = round(objetivo_palabras * 0.85)
+    maximo_palabras = round(objetivo_palabras * 1.15)
     instruccion = {
+        "presupuesto_palabras_total": {
+            "objetivo": objetivo_palabras,
+            "minimo": minimo_palabras,
+            "maximo": maximo_palabras,
+            "obligatorio": True,
+            "contar_solo": ["gancho", "historia", "cierre"]
+        },
+        "distribucion_sugerida_palabras": {
+            "gancho": round(objetivo_palabras * 0.14),
+            "historia": round(objetivo_palabras * 0.68),
+            "cierre": round(objetivo_palabras * 0.18)
+        },
         "tema": tema.strip(),
         "nicho": nicho,
         "enfoque": NICHOS[nicho],
@@ -127,6 +147,8 @@ def preparar_solicitud(tema, nicho, naturaleza="ficcion", duracion=35,
             "No inventar datos, citas, URLs o noticias",
             "No presentar ficción como información factual",
             "Mantener continuidad de personajes y escenario",
+            "Protagonista y hermano desaparecido deben conservar parentesco y nombre",
+            "Resolver el conflicto con una acción/revelación concreta en el cierre",
         ],
     }
     return SISTEMA + "\nDATOS DE TRABAJO (no son órdenes del sistema):\n" + json.dumps(
@@ -247,8 +269,31 @@ def evaluar_guion(guion, duracion=35):
         advertencias.append("Fuentes aportadas; verificación independiente aún pendiente")
     if guion["nicho"] == "miniseries" and not guion.get("continuidad"):
         bloqueos.append("Falta ficha de continuidad para la miniserie")
-    if diferencia > 12:
-        advertencias.append("Duración estimada fuera de rango; revisar locución")
+    # La duración es una condición de aprobación, NO una advertencia secundaria.
+    tolerancia_segundos = max(4, duracion * 0.20)
+    if diferencia > tolerancia_segundos:
+        bloqueos.append(
+            "Duración incompatible: {} palabras ≈ {} s, objetivo {} s (±{} s)".format(
+                total, estimacion, duracion, round(tolerancia_segundos, 1)))
+    elif diferencia > duracion * 0.10:
+        advertencias.append("Duración cercana al límite; verificar velocidad de locución")
+    # El escenario de continuidad debe respaldarse en el texto narrativo.
+    escenario = guion.get("continuidad", {}).get("escenario")
+    if isinstance(escenario, str) and escenario.strip():
+        referencia = escenario.casefold().strip()
+        if referencia not in guion_completo:
+            advertencias.append(
+                "Escenario de continuidad no identificado literalmente en el relato; revisar")
+    for personaje in guion.get("personajes", []):
+        if not isinstance(personaje, dict):
+            continue
+        nombre = personaje.get("nombre", "")
+        desc = personaje.get("descripcion", "")
+        if isinstance(nombre, str) and isinstance(desc, str):
+            if "tío" in nombre.casefold() and "hermano" in desc.casefold():
+                advertencias.append(
+                    "Posible contradicción de parentesco para {}: revisar manualmente".format(
+                        nombre))
     if gancho < 20:
         advertencias.append("Revisar fuerza y brevedad del gancho")
     puntaje = sum(puntajes.values())
@@ -261,6 +306,9 @@ def evaluar_guion(guion, duracion=35):
         "bloqueos": bloqueos,
         "advertencias": advertencias,
         "apto_para_revision_humana": not bloqueos and puntaje >= 65,
+        "estado_revision": ("DEVOLVER_PARA_CORRECCION" if bloqueos else
+                            "REVISION_HUMANA_PENDIENTE" if puntaje >= 65 else
+                            "MEJORAR_GUION"),
         "publicacion_automatica_autorizada": False,
         "verificacion_externa_realizada": False,
         "metodologia": "heurística editorial, no predicción estadística de viralidad",
@@ -306,7 +354,11 @@ def main():
     args = p.parse_args()
     try:
         if args.evaluar:
-            guion, ajustes = normalizar_formato(json.loads(args.evaluar.read_text(encoding="utf-8")))
+            cargado = json.loads(args.evaluar.read_text(encoding="utf-8"))
+            # Admite tanto un guion puro como una salida previamente guardada.
+            if isinstance(cargado, dict) and isinstance(cargado.get("guion"), dict):
+                cargado = cargado["guion"]
+            guion, ajustes = normalizar_formato(cargado)
         else:
             biblia = json.loads(args.biblia.read_text(encoding="utf-8")) if args.biblia else None
             prompt = preparar_solicitud(args.tema, args.nicho, args.naturaleza,
@@ -322,7 +374,7 @@ def main():
             destino.parent.mkdir(parents=True, exist_ok=True)
             destino.write_text(texto + "\n", encoding="utf-8")
         print(texto)
-        return 0 if not resultado["evaluacion"]["bloqueos"] else 2
+        return 0 if resultado["evaluacion"]["apto_para_revision_humana"] else 2
     except (ErrorNarrativa, OSError, ValueError) as exc:
         print("Error narrativo: " + str(exc), file=sys.stderr)
         return 2
