@@ -213,3 +213,60 @@ indica revisión humana necesaria, **no un fallo de Mac o de Ollama**.
 Limitación: el control de palabras asume unas 150 palabras/minuto.
 Debe cotejarse con la velocidad real de la voz y revisarse semánticamente
 para evitar incoherencias entre personajes, escenas y desenlace.
+
+
+## Cuarta prueba real: el modelo desobedece el presupuesto (v0.5)
+
+Tras dos reescrituras completas, Ollama todavía entregó 192 palabras /
+76,8 segundos para un objetivo de 35; el estado siguió correctamente como
+\`DEVOLVER_PARA_CORRECCION\`. No se debe insistir con el mismo prompt.
+
+### Nuevo método por bloques, independiente del editor anterior
+
+Se añadió la herramienta \`tools/barriga_ia_por_bloques.py\`, que toma el
+JSON local de la cuarta prueba y redacta **tres partes por separado**:
+
+- Gancho: 5–8 palabras (unos 2–3 segundos a 150 ppm).
+- Historia: 63–70 palabras para una pieza objetivo de 35 s.
+- Cierre: 13–18 palabras para una pieza objetivo de 35 s.
+
+La herramienta valida las palabras de cada pieza y, si no cumplen, permite
+**un segundo intento en esa pieza**, sin reiniciar las ya aceptadas. Máximo:
+seis llamadas a Ollama, 2 por cada bloque. A diferencia de recortar texto
+a ciegas, la IA redacta una nueva versión abreviada. Se conserva la premisa
+y las fichas de personajes originales como contexto.
+
+El resultado se vuelve a evaluar globalmente. Puede ser devuelto para
+revisión humana: los controles de extensión **no comprueban** continuidad
+semántica, resolución emocional ni viralidad. No hay publicación automática.
+
+### Ejecución local, sin sobrescribir los cuatro resultados previos
+
+~~~sh
+cd "$HOME/Barriga-IA-Pruebas"
+git fetch origin feature/barriga-ia-calendario-30-dias-20261023
+git switch --detach FETCH_HEAD
+python3 -m unittest discover -s tests -p 'test_barriga_ia_por_bloques.py' -v
+python3 tools/barriga_ia_por_bloques.py \
+  --revisar-archivo local-data/narrativa/cuarta-prueba.json \
+  --duracion 35 \
+  --max-intentos 2 \
+  --salida local-data/narrativa/quinta-prueba.json
+~~~
+
+Si \`quinta-prueba.json\` ya existe, se rechaza la operación y se solicita
+otro nombre. El original nunca se reescribe. El archivo nuevo guarda el
+historial de todas las piezas probadas y los diagnósticos.
+
+Para contenidos noticiosos o factuales no se ejecuta esta reducción
+automática: se necesita revisión humana y verificación de fuentes.
+
+### Limitaciones pendientes
+
+- El modo por bloques ya tiene pruebas simuladas, **aún no se ha probado
+  con la instancia real de Ollama en la Mac del usuario**.
+- El modelo local podría seguir sin ajustarse incluso por bloques.
+- La narración final debe comprobarse con voces reales, pausas, legibilidad,
+  continuidad de personajes y calidad humana antes de producción.
+- El total máximo de 6 llamadas puede consumir minutos en un Mac sin GPU
+  dedicada; no utilizar APIs de pago.
