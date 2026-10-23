@@ -67,9 +67,9 @@ def guard_path(root, rel):
 
 
 def context(root, task):
-    base = ['index.html', 'assets/studio-mejoras.js', 'tools/puente_local.py']
-    existing = [p for p in sorted(root.glob('assets/*.js')) if p.name != 'studio-mejoras.js']
-    files = [root / p for p in base] + existing[:3]
+    base = ['index.html', 'assets/escenas.js', 'assets/editorial.js']
+    existing = [p for p in sorted(root.glob('assets/*.js')) if p.name not in ('escenas.js', 'editorial.js')]
+    files = [root / p for p in base] + existing[:1]
     sections = []
     for path in files:
         if path.is_file() and path.stat().st_size <= 50_000:
@@ -77,7 +77,7 @@ def context(root, task):
             if path.name == 'index.html' and len(s) > 13_000:
                 s = s[:2000] + '\n[CSS intermedio omitido]\n' + s[-11_500:]
             sections.append('ARCHIVO ' + str(path.relative_to(root)) + '\n' + s)
-    return '\n\n'.join(sections)[:34_000]
+    return '\n\n'.join(sections)[:19_000]
 
 
 def ask_model(task, current, model):
@@ -108,6 +108,9 @@ def ask_model(task, current, model):
         'Prioriza crear un módulo JS en assets/ y enlazarlo desde index.html. '
         'No toques datos privados, versiones históricas ni herramientas del agente. '
         'Conserva nombres de controles, IDs HTML y funciones existentes. '
+        'Genera mejoras PEQUEÑAS: preferentemente un módulo nuevo de hasta 100 líneas JS y '
+        'un cambio HTML. Nunca envíes cadenas JavaScript truncadas, fragmentos incompletos '
+        'ni comillas, paréntesis, llaves o etiquetas sin cerrar. '
         'Código ejecutable y profesional; evita funciones vacías, ejemplos falsos y promesas. '
         'Se verificará sintaxis JS con Node si está disponible. '
         'No generes comandos shell. Responde en español.'
@@ -115,7 +118,8 @@ def ask_model(task, current, model):
     prompt = (system + '\n\nOBJETIVO DE ESTA ITERACIÓN: ' + task +
               '\n\nCÓDIGO ACTUAL:\n' + current +
               '\n\nRECUERDA: antes de escribir JSON, distingue archivos EXISTENTES (buscar/reemplazar) '
-              'de archivos NUEVOS (contenido). No uses contenido para assets/escenas.js.')
+              'de archivos NUEVOS (contenido). No uses contenido para assets/escenas.js. '
+              'Escribe JS completo y breve; nunca dejes un <div o un literal abierto.')
     payload = {'model': model, 'prompt': prompt, 'format': 'json', 'stream': False,
                'options': {'temperature': 0.2, 'num_ctx': 12288, 'num_predict': 3500}}
     request = Request(OLLAMA, data=json.dumps(payload).encode('utf-8'),
@@ -248,61 +252,77 @@ def run_stage(root, name, goal, model):
     backup = 'backup/barriga-ia-' + datetime.now().strftime('%Y%m%d-%H%M%S-%f')
     git(root, 'branch', backup)
     print('Respaldo Git: ' + backup, flush=True)
-    planned = None
     error_feedback = ''
     max_attempts = 5
     for attempt in range(1, max_attempts + 1):
         task = goal + error_feedback
         answer = ask_model(task, context(root, task), model)
+        planned = {}
+        previous = {}
         try:
             planned = plan_changes(root, answer['cambios'])
-            break
-        except ValueError as exc:
+            previous = {rel: (root / rel).read_text(encoding='utf-8')
+                        if (root / rel).exists() else None for rel in planned}
+            for rel, content in planned.items():
+                target = root / rel
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_text(content, encoding='utf-8')
+            validate(root, planned)
+        except (ValueError, RuntimeError, SyntaxError) as exc:
+            # Hasta pasar las verificaciones, ningún parche ni archivo nuevo debe persistir.
+            if previous:
+                restore(root, previous)
+            if git(root, 'status', '--porcelain'):
+                raise RuntimeError('No se pudo restaurar el estado Git original; detener') from exc
             if attempt == max_attempts:
-                raise RuntimeError('Cinco propuestas no aplicables; no se editó ningún archivo: ' + str(exc)) from exc
-            print('Parche rechazado (' + str(attempt) + '/' + str(max_attempts) + '): ' + str(exc) + '. Reintentando...', flush=True)
+                raise RuntimeError('Cinco propuestas no válidas; no se editaron archivos: ' +
+                                   str(exc)) from exc
             message = str(exc)
-            if message.startswith('Archivo nuevo repetido: '):
-                advice = ('No crees dos veces un mismo archivo. Envía una única entrada contenido '
-                          'para esa ruta y usa las otras entradas para otros archivos.')
+            print('Propuesta rechazada (' + str(attempt) + '/' + str(max_attempts) +
+                  '): ' + message[:350] + '. Reintentando...', flush=True)
+            if 'Sintaxis JS inválida' in message:
+                advice = ('Tu código JavaScript no compila. Regenera SOLO una mejora mínima '
+                          'con código completo, sin líneas cortadas ni HTML incompleto. '
+                          'Máximo 100 líneas de JS nuevo. Comprueba cierres de llaves, '
+                          'paréntesis, comillas y literales de plantilla. '
+                          'No modifiques más de dos archivos.')
+            elif message.startswith('Archivo nuevo repetido: '):
+                advice = ('No crees dos veces un mismo archivo. Envía una sola entrada '
+                          'contenido para esa ruta.')
             elif message.startswith('Para archivo existente usa buscar/reemplazar: '):
-                rejected_path = message.split(': ', 1)[1]
-                advice = ('La ruta ' + rejected_path + ' YA EXISTE. Está PROHIBIDO devolver contenido '
-                          'para ella. Usa buscar/reemplazar exactos o crea un JS NUEVO '
-                          'y agrégalo a index.html con otro parche.')
+                advice = ('Esa ruta YA EXISTE; para ella usa buscar/reemplazar exactos, '
+                          'no contenido. O crea un archivo NUEVO y enlázalo desde index.html.')
             elif message.startswith('El parche no coincide exactamente una vez: '):
-                rejected_path = message.split(': ', 1)[1]
-                advice = ('Tu campo buscar NO aparece exactamente una vez en ' + rejected_path +
-                          '. Copia textualmente una cadena breve y ÚNICA del archivo mostrado, '
-                          'o crea un JS NUEVO y enlázalo con un parche exacto a index.html.')
+                advice = ('Copia una cadena BREVE y literal que aparezca una sola vez '
+                          'en el archivo actual. No adivines el contenido.')
+            elif message.startswith('Script enlazado que no existe: '):
+                advice = ('Crea el script correspondiente en la misma propuesta o no '
+                          'agregues su etiqueta <script> al HTML.')
             else:
-                advice = ('Usa rutas diferentes y los fragmentos literales presentes '
-                          'en el código actual, sin modificar archivos protegidos.')
-            error_feedback = ('\n\nCORRECCIÓN OBLIGATORIA DEL INTENTO ' + str(attempt) +
-                              ': ' + message + '. ' + advice +
-                              ' Rehaz TODOS los cambios en JSON válido, sin repetir el error.')
-    previous = {rel: (root / rel).read_text(encoding='utf-8') if (root / rel).exists() else None
-                for rel in planned}
-    try:
-        for rel, content in planned.items():
-            target = root / rel
-            target.parent.mkdir(parents=True, exist_ok=True)
-            target.write_text(content, encoding='utf-8')
-        validate(root, planned)
-        git(root, 'add', '--', *planned)
-        diff = subprocess.run(['git', 'diff', '--cached', '--check'], cwd=root,
-                              text=True, capture_output=True, timeout=20)
-        if diff.returncode:
-            raise RuntimeError('git diff --check: ' + diff.stdout + diff.stderr)
-        git(root, 'commit', '-m', 'Barriga IA: ' + name)
+                advice = ('Propón cambios más pequeños, correctos y compatibles con '
+                          'los archivos existentes. Respeta todas las rutas y controles.')
+            error_feedback = ('\n\nRECHAZADO EN INTENTO ' + str(attempt) + ': ' +
+                              message[:700] + '. ' + advice +
+                              ' Envía JSON completo y corregido, NO repitas el error.')
+            continue
+        # Conservar protección: un fallo de Git no se trata como error del modelo.
+        try:
+            git(root, 'add', '--', *planned)
+            diff = subprocess.run(['git', 'diff', '--cached', '--check'], cwd=root,
+                                  text=True, capture_output=True, timeout=20)
+            if diff.returncode:
+                raise RuntimeError('git diff --check: ' + diff.stdout + diff.stderr)
+            git(root, 'commit', '-m', 'Barriga IA: ' + name)
+        except Exception:
+            git(root, 'reset', '-q', '--', *planned, check=False)
+            restore(root, previous)
+            raise
         sha = git(root, 'rev-parse', '--short', 'HEAD')
         print('APROBADO: ' + name + ' | commit ' + sha + ' | ' + ', '.join(planned), flush=True)
-        print('Nota: pasó validación estructural y de sintaxis, no prueba funcional real.', flush=True)
+        print('Nota: pasó validación estructural y de sintaxis, no prueba funcional real.',
+              flush=True)
         return True
-    except Exception:
-        git(root, 'reset', '-q', '--', *planned, check=False)
-        restore(root, previous)
-        raise
+    raise RuntimeError('No hubo propuestas válidas para esta fase')
 
 
 def main():
