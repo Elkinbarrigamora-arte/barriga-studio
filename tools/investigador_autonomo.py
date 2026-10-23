@@ -47,7 +47,7 @@ def private_dir():
 
 
 def clean(text, limit=360):
-    return re.sub(r"\\s+", " ", text or "").strip()[:limit]
+    return re.sub(r"\s+", " ", text or "").strip()[:limit]
 
 
 def topics_for(text):
@@ -100,7 +100,7 @@ def write_private(path, data):
     try:
         with os.fdopen(fd, "w", encoding="utf-8") as out:
             json.dump(data, out, ensure_ascii=False, indent=2)
-            out.write("\\n")
+            out.write("\n")
         os.chmod(tmp, 0o600)
         os.replace(tmp, path)
     finally:
