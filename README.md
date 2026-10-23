@@ -77,3 +77,20 @@ Visitar `http://127.0.0.1:8080`. Esta prueba sirve solo la interfaz estática y 
 - No se instalan APIs de pago, no se publican puertos de la Mac ni se habilita trabajo nocturno.
 - **Atención:** a 22 oct 2026, el repositorio de GitHub aparece como **público**. No incluir proyectos privados, secretos, credenciales ni referencias personales en archivos versionados.
 - Un cambio en GitHub `main` **no garantiza** actualización automática del dominio del Studio: la ruta de despliegue debe comprobarse.
+
+
+## Barriga IA: desarrollo local sobre el Studio principal (experimental)
+
+El coordinador de `tools/agente_desarrollo.py` usa **Ollama local** para proponer cambios reales en el código del proyecto. Trabaja directamente sobre la rama **main local** de la Mac, crea una rama de respaldo por fase, valida la sintaxis y registra un commit por fase aprobada. Las cinco fases son: **guiones, escenas, proyectos, motores y control de calidad**.
+
+Para ejecutarlo, abre una **nueva pestaña de Terminal** (puedes mantener abierto el puente de guiones) y pega:
+
+```bash
+cd "$HOME/barriga-studio" && git pull --ff-only origin main && python3 tools/agente_desarrollo.py --studio "$PWD" --ciclos 5
+```
+
+**Requisitos:** Ollama encendido con el modelo `qwen2.5-coder:14b`, Git limpio, Python 3 y Node.js para validar modificaciones JavaScript. Si falta Node, el agente se detiene y muestra el motivo; no instala software por su cuenta.
+
+La ejecución **no es continua, no entrena pesos, no modifica automáticamente Ollama y no publica commits en GitHub**. No ejecuta comandos propuestos por el modelo, no permite escribir fuera de las carpetas autorizadas y bloquea modificaciones a su propio ejecutor. Si una propuesta no supera validación, revierte los archivos afectados. Reanudar la ejecución omite las fases cuyos commits ya se registraron.
+
+**Alcance de la prueba:** se probaron con éxito cuatro verificaciones unitarias del coordinador en un entorno aislado (rutas protegidas, parche exacto, commit con respaldo y reversión por JavaScript defectuoso). **No** se ha ejecutado aún este coordinador con Ollama en la Mac ni se ha demostrado producción audiovisual. Validar sintaxis no equivale a probar la interfaz completa. Consulta [el plan maestro](docs/PLAN_MAESTRO.md).
