@@ -267,7 +267,7 @@ def evaluar_guion(guion, duracion=35):
     }
 
 
-def generar_local(prompt, modelo=MODELO, timeout=180):
+def generar_local(prompt, modelo=MODELO, timeout=180, devolver_ajustes=False):
     """Solo consulta el servicio local de Ollama; no usa proveedores remotos."""
     payload = {
         "model": modelo, "prompt": prompt, "stream": False, "format": ESQUEMA_JSON,
@@ -284,8 +284,8 @@ def generar_local(prompt, modelo=MODELO, timeout=180):
     if not isinstance(result, dict) or not isinstance(result.get("response"), str):
         raise ErrorNarrativa("Respuesta de Ollama sin campo 'response'")
     try:
-        guion, _ = normalizar_formato(json.loads(result["response"]))
-        return guion
+        guion, ajustes = normalizar_formato(json.loads(result["response"]))
+        return (guion, ajustes) if devolver_ajustes else guion
     except ValueError as exc:
         raise ErrorNarrativa("Ollama no devolvió JSON válido") from exc
 
@@ -311,8 +311,8 @@ def main():
             biblia = json.loads(args.biblia.read_text(encoding="utf-8")) if args.biblia else None
             prompt = preparar_solicitud(args.tema, args.nicho, args.naturaleza,
                                         args.duracion, args.fuente, biblia)
-            guion = generar_local(prompt, modelo=args.modelo)
-            ajustes = []
+            guion, ajustes = generar_local(prompt, modelo=args.modelo,
+                                          devolver_ajustes=True)
         resultado = {"guion": guion, "evaluacion": evaluar_guion(guion, args.duracion),
                      "ajustes_de_formato": ajustes,
                      "fecha_revision": datetime.utcnow().isoformat() + "Z"}
