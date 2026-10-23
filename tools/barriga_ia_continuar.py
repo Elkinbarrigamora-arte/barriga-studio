@@ -110,8 +110,32 @@ def armar_instruccion(etapa, gancho, escritos, original, premisa, limites,
     )
 
 
+def recuperar_bloques_previamente_aprobados(path, original, gancho, duracion):
+    """Reanudar exclusivamente fragmentos aceptados en el informe anterior."""
+    data = json.loads(Path(path).read_text(encoding="utf-8"))
+    previos = data.get("bloques_conservados", {})
+    if not isinstance(previos, dict) or previos.get("gancho") != gancho:
+        return {}
+    limites = limites_escenas(duracion)
+    recuperados = {}
+    for etapa in ETAPAS:
+        if etapa not in previos:
+            break  # No saltar etapas ni confiar en fragmentos posteriores aislados.
+        texto = previos[etapa]
+        if not isinstance(texto, str):
+            break
+        minimo, maximo = limites[etapa]
+        bloque = "cierre" if etapa == "cierre" else "historia"
+        if not (minimo <= contar_palabras(texto) <= maximo):
+            break
+        if detectar_problemas_editoriales(texto, original, bloque):
+            break
+        recuperados[etapa] = texto
+    return recuperados
+
+
 def continuar_en_escenas(original, gancho, premisa, duracion=35, modelo=MODELO,
-                         max_intentos=2, generador=None):
+                         max_intentos=2, generador=None, bloques_previos=None):
     if generador is None:
         generador = generar_texto_local
     if max_intentos not in (1, 2):
@@ -119,11 +143,11 @@ def continuar_en_escenas(original, gancho, premisa, duracion=35, modelo=MODELO,
     if original.get("naturaleza") not in ("ficcion", "dramatizacion"):
         raise ErrorNarrativa("La continuación no admite materiales factuales")
     limites = limites_escenas(duracion)
-    historia = {}
+    historia = dict(bloques_previos or {})
     reporte = {
         "guion_original": original,
         "gancho_recuperado": gancho,
-        "bloques_conservados": {"gancho": gancho},
+        "bloques_conservados": {"gancho": gancho, **historia},
         "limites": {k: list(v) for k, v in limites.items()},
         "historial_intentos": [],
         "guion": None,
@@ -133,6 +157,8 @@ def continuar_en_escenas(original, gancho, premisa, duracion=35, modelo=MODELO,
         "revision_semantica_realizada": False,
     }
     for etapa in ETAPAS:
+        if etapa in historia:
+            continue
         anterior = None
         valido = False
         for numero in range(1, max_intentos + 1):
@@ -213,9 +239,11 @@ def main():
         if opts.salida.exists():
             raise ErrorNarrativa("La salida ya existe; usar otro nombre")
         original, gancho = recuperar_gancho(opts.desde)
+        previos = recuperar_bloques_previamente_aprobados(opts.desde, original, gancho, opts.duracion)
         resultado = continuar_en_escenas(
             original, gancho, opts.premisa, duracion=opts.duracion,
-            modelo=opts.modelo, max_intentos=opts.max_intentos)
+            modelo=opts.modelo, max_intentos=opts.max_intentos,
+            bloques_previos=previos)
         resultado["fecha_revision"] = datetime.utcnow().isoformat() + "Z"
         opts.salida.parent.mkdir(parents=True, exist_ok=True)
         with opts.salida.open("x", encoding="utf-8") as target:
