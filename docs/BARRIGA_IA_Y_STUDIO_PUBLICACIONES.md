@@ -3,20 +3,20 @@
 ## Principio de arquitectura
 
 **Barriga IA es independiente de Barriga Studio.** El código de planificación
-y el almacén se encuentran en \`tools/barriga_ia_calendario.py\`, sin importar
+y el almacén se encuentran en `tools/barriga_ia_calendario.py`, sin importar
 código del navegador, sin abrir puertos ni contactar plataformas. Studio es un
-panel **opcional y de solo lectura** en \`studio-publicaciones.html\`.
+panel **opcional y de solo lectura** en `studio-publicaciones.html`.
 
-La pantalla principal \`index.html\`, los tres estilos y los proyectos
+La pantalla principal `index.html`, los tres estilos y los proyectos
 guardados previamente no se modifican con esta entrega. No se fusiona nada
-automáticamente con \`main\`.
+automáticamente con `main`.
 
 ## Alcance realmente implementado en esta rama
 
 | Capacidad | Estado |
 | --- | --- |
 | Plantilla de 30 días × 2 horarios: 03:30 / 17:30 | Implementada en planificador local |
-| Zona horaria \`America/Bogota\` | Definida para horarios y registros |
+| Zona horaria `America/Bogota` | Definida para horarios y registros |
 | Almacén de máximo 30 videos, SQLite persistente | Implementado; datos fuera del repositorio |
 | Título y exactamente cinco hashtags únicos | Validados al ingreso |
 | Requerir confirmación manual de aprobación | Implementado |
@@ -40,23 +40,23 @@ Ningún CSV programa por sí solo una publicación.
 
 Desde la raíz del repositorio y con la Mac encendida para preparar el plan:
 
-\`\`\`sh
+```sh
 python3 tools/barriga_ia_calendario.py planificar --desde 2026-10-24
 python3 tools/barriga_ia_calendario.py estado
 python3 tools/barriga_ia_calendario.py exportar --salida local-data/calendario.csv
 python3 -m unittest discover -s tests -p "test_barriga_ia_calendario.py" -v
-\`\`\`
+```
 
-Por defecto se creará \`local-data/barriga-ia.sqlite3\`. Este directorio está
+Por defecto se creará `local-data/barriga-ia.sqlite3`. Este directorio está
 excluido de Git. La aplicación no registra automáticamente los clips ya
 existentes en Studio.
 
 ### Ejemplo de manifiesto local
 
-Crear \`local-data/video1.json\` **solo después** de revisar y aprobar un video
+Crear `local-data/video1.json` **solo después** de revisar y aprobar un video
 real (la ruta debe existir y corresponder a un archivo MP4):
 
-\`\`\`json
+```json
 {
   "id": "video1",
   "archivo": "/ruta/privada/video-final.mp4",
@@ -64,15 +64,15 @@ real (la ruta debe existir y corresponder a un archivo MP4):
   "hashtags": ["#Oceano", "#Naturaleza", "#Misterios", "#Animales", "#Ciencia"],
   "aprobacion_manual": true
 }
-\`\`\`
+```
 
-\`\`\`sh
+```sh
 python3 tools/barriga_ia_calendario.py ingresar --manifiesto local-data/video1.json
 python3 tools/barriga_ia_calendario.py asignar --id video1 --fecha 2026-10-24 --hora 17:30
 python3 tools/barriga_ia_calendario.py exportar --salida local-data/calendario.csv
-\`\`\`
+```
 
-Abrir \`studio-publicaciones.html\` localmente desde el navegador y seleccionar
+Abrir `studio-publicaciones.html` localmente desde el navegador y seleccionar
 el CSV para visualizar los horarios. **Este panel no publica, no carga el CSV
 a una web y no modifica la base de datos de Barriga IA.**
 
