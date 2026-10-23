@@ -8,7 +8,8 @@ from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tools"))
 from barriga_ia_narrativa import (ErrorNarrativa, NICHOS, evaluar_guion,
-                                  generar_local, preparar_solicitud, normalizar_formato)
+                                  generar_local, preparar_solicitud, normalizar_formato,
+                                  contar_palabras)
 
 
 GANCHO = "¡La última carta de su hermano apareció treinta años después del naufragio!"
@@ -54,7 +55,7 @@ class PruebasNarrativa(unittest.TestCase):
             self.assertIn(palabra, prompt)
         self.assertIn("continuidad", prompt.lower())
         self.assertIn('"objetivo": 88', prompt)
-        self.assertIn('"maximo": 101', prompt)
+        self.assertIn('"maximo": 97', prompt)
 
     def test_evaluacion_ficcion_no_publica(self):
         resultado = evaluar_guion(ejemplo())
@@ -87,6 +88,28 @@ class PruebasNarrativa(unittest.TestCase):
         self.assertEqual(reporte["estado_revision"], "DEVOLVER_PARA_CORRECCION")
         self.assertTrue(any("Duración incompatible" in x for x in reporte["bloqueos"]))
         self.assertFalse(reporte["publicacion_automatica_autorizada"])
+
+    def test_regresion_segunda_prueba_103_palabras_41_segundos(self):
+        # Simula la longitud de la segunda generación REAL sin exponer el relato.
+        guion = ejemplo()
+        while sum(contar_palabras(guion[k]) for k in ("gancho", "historia", "cierre")) < 103:
+            guion["historia"] += " secreto"
+        rep = evaluar_guion(guion, 35)
+        self.assertEqual(rep["palabras"], 103)
+        self.assertEqual(rep["segundos_estimados"], 41.2)
+        self.assertFalse(rep["apto_para_revision_humana"])
+        self.assertEqual(rep["estado_revision"], "DEVOLVER_PARA_CORRECCION")
+        self.assertTrue(any("Duración incompatible" in x for x in rep["bloqueos"]))
+
+    def test_alertas_por_ortografia_y_cierre_de_relleno(self):
+        guion = ejemplo()
+        guion["historia"] += " El forgero volvió al muelle."
+        guion["cierre"] = "Daniel llamó a sus conocidos, resuelven el caso y todos quedaron felices."
+        guion["continuidad"] = {}
+        reporte = evaluar_guion(guion, 35)
+        self.assertTrue(any("forgero" in x for x in reporte["advertencias"]))
+        self.assertTrue(any("genérico" in x for x in reporte["advertencias"]))
+        self.assertTrue(any("ficha de continuidad" in x for x in reporte["advertencias"]))
 
     def test_continuidad_sospechosa_generar_advertencias(self):
         guion = ejemplo()
