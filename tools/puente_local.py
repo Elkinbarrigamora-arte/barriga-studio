@@ -7,6 +7,7 @@ import time
 import webbrowser
 from pathlib import Path
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from urllib.parse import urlsplit
 from urllib.request import Request, urlopen
 from urllib.error import HTTPError, URLError
 
@@ -99,20 +100,21 @@ def servidor(studio, token, puerto, modelo):
             self.end_headers()
             self.wfile.write(data)
         def do_GET(self):
-            if self.path in ("/", "/index.html"):
+            route = urlsplit(self.path).path
+            if route in ("/", "/index.html"):
                 html = (studio/"index.html").read_text(encoding="utf-8")
                 html = html.replace("</body>", PANEL.replace("__TOKEN__",
                                       json.dumps(token))+"</body>")
                 self.send(200, html, "text/html; charset=utf-8")
-            elif self.path == "/assets/studio-mejoras.js":
+            elif route == "/assets/studio-mejoras.js":
                 asset = studio / "assets" / "studio-mejoras.js"
                 if not asset.is_file():
                     self.send(404, {"error": "Módulo de mejoras no encontrado"})
                 else:
                     self.send(200, asset.read_text(encoding="utf-8"),
                               "text/javascript; charset=utf-8")
-            elif self.path.startswith("/assets/"):
-                relative = self.path[len("/assets/"):]
+            elif route.startswith("/assets/"):
+                relative = route[len("/assets/"): ]
                 if (not relative or "/" in relative or "\\" in relative or
                     relative.startswith(".") or not relative.endswith((".js", ".css"))):
                     return self.send(404, {"error": "Ruta desconocida"})
@@ -122,7 +124,7 @@ def servidor(studio, token, puerto, modelo):
                 content_type = ("text/javascript; charset=utf-8" if relative.endswith(".js")
                                 else "text/css; charset=utf-8")
                 self.send(200, asset.read_text(encoding="utf-8"), content_type)
-            elif self.path == "/api/health":
+            elif route == "/api/health":
                 self.send(200, {"servidor": "OK", "modelo_solicitado": modelo,
                                 "inferencia_real_comprobada": False,
                                 "video_neuronal_comprobado": False})
