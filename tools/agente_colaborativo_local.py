@@ -16,7 +16,7 @@ from urllib.request import Request, urlopen
 
 ROOT = Path(__file__).resolve().parents[1]
 DB = ROOT / "local-data" / "agente_colaborativo.sqlite3"
-ACTIONS = ("diagnostico", "pruebas", "evaluar_ollama", "auditoria_narrativa")
+ACTIONS = ("diagnostico", "pruebas", "evaluar_ollama", "auditoria_narrativa", "regresion_narrativa")
 MODEL = "qwen2.5-coder:14b"
 
 
@@ -62,6 +62,20 @@ def run_action(accion, entrada, root=ROOT):
         return {"aprobadas": test.returncode == 0,
                 "codigo_salida": test.returncode,
                 "resumen": (test.stderr or test.stdout)[-1800:]}
+    if accion == "regresion_narrativa":
+        # No confiar en conclusiones de Ollama sin pruebas ejecutadas.
+        test = subprocess.run(
+            [sys.executable, "-m", "unittest", "discover", "-s", "tests",
+             "-p", "test_barriga_ia_*.py", "-v"],
+            cwd=root, capture_output=True, text=True, timeout=120)
+        output = test.stderr + test.stdout
+        import re
+        match = re.search(r"Ran (\\d+) tests?", output)
+        return {"pruebas_superadas": test.returncode == 0,
+                "cantidad": int(match.group(1)) if match else None,
+                "errores_detectados": test.returncode != 0,
+                "resumen": output[-3500:],
+                "cambios_aplicados": False}
     if accion == "auditoria_narrativa":
         files = [
             "tools/barriga_ia_continuar.py",
