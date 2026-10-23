@@ -3,13 +3,15 @@ import io
 import json
 from pathlib import Path
 import sys
+import tempfile
 import unittest
 from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tools"))
 from barriga_ia_narrativa import (ErrorNarrativa, NICHOS, evaluar_guion,
                                   generar_local, preparar_solicitud, normalizar_formato,
-                                  contar_palabras)
+                                  contar_palabras, revisar_borrador_local,
+                                  preparar_revision, main)
 
 
 GANCHO = "¡La última carta de su hermano apareció treinta años después del naufragio!"
@@ -219,6 +221,109 @@ class PruebasNarrativa(unittest.TestCase):
             producido = generar_local("prueba")
             self.assertEqual(producido["personajes"], [{"nombre": "Daniel"}])
             self.assertTrue(evaluar_guion(producido)["apto_para_revision_humana"])
+
+    def test_revisiones_corrigen_longitud_sin_truncar_palabras(self):
+        largo = ejemplo()
+        largo["historia"] += " Otra descripción innecesaria del puerto." * 20
+        self.assertGreater(evaluar_guion(largo)["segundos_estimados"], 39.2)
+        corto = ejemplo()
+        llamadas = []
+        def corregir(prompt, **kwargs):
+            llamadas.append((prompt, kwargs))
+            return corto, []
+        with patch("barriga_ia_narrativa.generar_local", side_effect=corregir):
+            salida = revisar_borrador_local(largo, duracion=35)
+        self.assertEqual(salida["intentos_realizados"], 2)
+        self.assertTrue(salida["evaluacion"]["apto_para_revision_humana"])
+        self.assertFalse(salida["publicacion_automatica_autorizada"])
+        self.assertEqual(salida["historial_intentos"][0]["guion"], largo)
+        self.assertEqual(salida["historial_intentos"][-1]["guion"], corto)
+        self.assertIn("intervalo_obligatorio_palabras", llamadas[0][0])
+        self.assertEqual(llamadas[0][1]["temperatura"], 0.25)
+
+    def test_dos_revisiones_maximas_aunque_ollama_siga_fallando(self):
+        largo = ejemplo()
+        largo["historia"] += " No hubo una revelación concreta." * 20
+        with patch("barriga_ia_narrativa.generar_local",
+                   return_value=(largo, [])) as model:
+            salida = revisar_borrador_local(largo, max_revisiones=2)
+        self.assertEqual(salida["intentos_realizados"], 3)
+        self.assertEqual(model.call_count, 2)
+        self.assertFalse(salida["evaluacion"]["apto_para_revision_humana"])
+        self.assertEqual(salida["evaluacion"]["estado_revision"],
+                         "DEVOLVER_PARA_CORRECCION")
+        self.assertIn("agotó", salida["incidencia_reescritura"])
+
+    def test_una_respuesta_de_nicho_diferente_no_se_adopta(self):
+        largo = ejemplo()
+        largo["historia"] += " No hubo una revelación concreta." * 20
+        desviado = ejemplo("noticias", "factual", ["https://example.com"])
+        with patch("barriga_ia_narrativa.generar_local",
+                   return_value=(desviado, [])) as model:
+            salida = revisar_borrador_local(largo)
+        self.assertEqual(model.call_count, 1)
+        self.assertEqual(salida["guion"]["nicho"], "leyendas")
+        self.assertEqual(salida["intentos_realizados"], 1)
+        self.assertIn("cambió", salida["incidencia_reescritura"])
+
+    def test_no_reescribe_noticias_sin_revision_de_fuentes(self):
+        largo = ejemplo("noticias", "factual", ["https://example.com"])
+        largo["historia"] += " Información sin contexto temporal." * 20
+        with patch("barriga_ia_narrativa.generar_local") as model:
+            salida = revisar_borrador_local(largo)
+        model.assert_not_called()
+        self.assertEqual(salida["intentos_realizados"], 1)
+        self.assertFalse(salida["evaluacion"]["apto_para_revision_humana"])
+        self.assertIn("hechos reales", salida["incidencia_reescritura"])
+
+    def test_revisar_archivo_guarda_nuevo_sin_borrar_tercera_prueba(self):
+        largo = ejemplo()
+        largo["historia"] += " Otra descripción innecesaria del puerto." * 20
+        with tempfile.TemporaryDirectory() as temp:
+            anterior = Path(temp) / "tercera-prueba.json"
+            posterior = Path(temp) / "cuarta-prueba.json"
+            original = json.dumps({"guion": largo}, ensure_ascii=False)
+            anterior.write_text(original, encoding="utf-8")
+            with patch("sys.argv", ["narrativa.py", "--revisar-archivo",
+                                    str(anterior), "--salida", str(posterior)]):
+                with patch("barriga_ia_narrativa.generar_local",
+                           return_value=(ejemplo(), [])):
+                    with patch("sys.stdout", new_callable=io.StringIO):
+                        resultado = main()
+            self.assertEqual(resultado, 0)
+            self.assertEqual(anterior.read_text(encoding="utf-8"), original)
+            self.assertTrue(posterior.exists())
+            saved = json.loads(posterior.read_text(encoding="utf-8"))
+            self.assertEqual(saved["intentos_realizados"], 2)
+            self.assertTrue(saved["evaluacion"]["apto_para_revision_humana"])
+
+    def test_rechazar_sobrescribir_fuente_antes_de_llamar_ollama(self):
+        with tempfile.TemporaryDirectory() as temp:
+            anterior = Path(temp) / "tercera-prueba.json"
+            original = json.dumps({"guion": ejemplo()}, ensure_ascii=False)
+            anterior.write_text(original, encoding="utf-8")
+            with patch("sys.argv", ["narrativa.py", "--revisar-archivo",
+                                    str(anterior), "--salida", str(anterior)]):
+                with patch("barriga_ia_narrativa.generar_local") as model:
+                    with patch("sys.stderr", new_callable=io.StringIO):
+                        codigo = main()
+            self.assertEqual(codigo, 2)
+            model.assert_not_called()
+            self.assertEqual(anterior.read_text(encoding="utf-8"), original)
+
+    def test_revision_con_error_local_guarda_mejor_ultimo_borrador(self):
+        largo = ejemplo()
+        largo["historia"] += " Otra descripción innecesaria del puerto." * 20
+        with patch("barriga_ia_narrativa.generar_local",
+                   side_effect=ErrorNarrativa("Ollama no responde")) as model:
+            salida = revisar_borrador_local(largo)
+        self.assertEqual(model.call_count, 1)
+        self.assertEqual(salida["guion"], largo)
+        self.assertIn("Ollama no responde", salida["incidencia_reescritura"])
+
+    def test_limite_revisiones_se_valida(self):
+        with self.assertRaises(ErrorNarrativa):
+            revisar_borrador_local(ejemplo(), max_revisiones=99)
 
     def test_ollama_solo_solicitud_local_y_json(self):
         salida = {"response": json.dumps(ejemplo(), ensure_ascii=False)}
