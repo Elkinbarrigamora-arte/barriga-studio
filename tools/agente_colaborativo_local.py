@@ -16,7 +16,7 @@ from urllib.request import Request, urlopen
 
 ROOT = Path(__file__).resolve().parents[1]
 DB = ROOT / "local-data" / "agente_colaborativo.sqlite3"
-ACTIONS = ("diagnostico", "pruebas", "evaluar_ollama")
+ACTIONS = ("diagnostico", "pruebas", "evaluar_ollama", "auditoria_narrativa")
 MODEL = "qwen2.5-coder:14b"
 
 
@@ -62,6 +62,43 @@ def run_action(accion, entrada, root=ROOT):
         return {"aprobadas": test.returncode == 0,
                 "codigo_salida": test.returncode,
                 "resumen": (test.stderr or test.stdout)[-1800:]}
+    if accion == "auditoria_narrativa":
+        files = [
+            "tools/barriga_ia_continuar.py",
+            "tools/barriga_ia_por_bloques.py",
+        ]
+        snippets = []
+        for rel in files:
+            source = (root / rel).read_text(encoding="utf-8")
+            if rel.endswith("continuar.py"):
+                keys = ("def recuperar_gancho", "def recuperar_bloques_previamente_aprobados")
+            else:
+                keys = ("def detectar_problemas_editoriales",)
+            for key in keys:
+                start = source.find(key)
+                if start < 0:
+                    raise ValueError("Falta funcion requerida: " + key)
+                end = source.find("\\ndef ", start + 4)
+                snippets.append(rel + " / " + key + "\\n" + source[start:end if end >= 0 else None][:3300])
+        evidence = "\\n\\n".join(snippets)
+        payload = json.dumps({
+            "model": MODEL, "stream": False,
+            "prompt": (
+                "Actua como revisor de codigo Python. Solo puedes atribuir como "
+                "evidencia fragmentos incluidos a continuacion. Separa HECHOS "
+                "OBSERVABLES de HIPOTESIS. Busca errores al recuperar los bloques "
+                "aprobados y falsos positivos del detector de nombres. "
+                "Propone pruebas unitarias concretas; no digas que aplicaste parches.\\n"
+                + evidence),
+            "options": {"num_predict": 750},
+        })
+        req = Request("http://127.0.0.1:11434/api/generate",
+                      data=payload.encode(), headers={"Content-Type": "application/json"})
+        with urlopen(req, timeout=180) as resp:
+            data = json.load(resp)
+        return {"archivos_examinados": files,
+                "diagnostico": str(data.get("response", ""))[:15000],
+                "cambios_aplicados": False}
     if accion == "evaluar_ollama":
         if not entrada.strip():
             raise ValueError("Se requiere una tarea de evaluacion")
