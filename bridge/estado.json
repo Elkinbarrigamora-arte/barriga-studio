@@ -1,0 +1,49 @@
+{
+  "version": 1,
+  "resultados": [
+    {
+      "id": "BS-1001",
+      "accion": "diagnostico",
+      "estado": "OK",
+      "datos": {
+        "git_disponible": true,
+        "cambios_locales": false,
+        "ollama_conectado": true,
+        "drawthings_conectado": true,
+        "node_disponible": false
+      }
+    },
+    {
+      "id": "BS-1002",
+      "accion": "auditoria_interfaz",
+      "estado": "OK",
+      "datos": {
+        "enlaces_sin_destino": 0,
+        "ids_duplicados": 0,
+        "editor_en_dos_columnas": true,
+        "navegacion_requiere_revision": true
+      }
+    },
+    {
+      "id": "BS-1003",
+      "accion": "revision_proyectos",
+      "estado": "OK",
+      "datos": {
+        "guardado_local": true,
+        "abre_proyecto": true,
+        "respaldo_json": true,
+        "guarda_escenas_en_proyecto": false
+      }
+    },
+    {
+      "id": "BS-1004",
+      "accion": "pruebas_agente",
+      "estado": "OK",
+      "datos": {
+        "pruebas_disponibles": true,
+        "pruebas_pasadas": true,
+        "total_pruebas": 9
+      }
+    }
+  ]
+}
