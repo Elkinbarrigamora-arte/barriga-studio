@@ -409,3 +409,59 @@ python3 tools/barriga_ia_continuar.py \
   humana de continuidad, desenlace, originalidad y lectura con voz.
 - Se preserva la separación entre Barriga IA y Barriga Studio; la
   actualización vive en una rama de pruebas, no en \`main\`.
+
+
+## Ruta alternativa v0.7: gancho verificable a partir de la premisa
+
+Los intentos de Ollama para un gancho de 5–8 palabras devolvieron la misma
+frase de 11 palabras, con «Pepe» sin sustento en la premisa. En lugar de
+subir la cantidad de intentos, se añadió una alternativa **determinista y
+trazable**: construir un gancho breve SOLO cuando la premisa verifica los
+hechos básicos que aparecen en él. Para la historia de la carta del hermano
+desaparecido, el gancho es:
+
+> ¡La carta de su hermano fue escrita ayer!
+
+El gancho **no afirma que el hermano escribió la carta**: precisamente
+esa es la incógnita de la historia. Contiene 8 palabras.
+
+- Se activa explícitamente con \`--estrategia-gancho reglas-primero\`.
+- \`--premisa\` aporta el contexto original, sin depender de posibles
+  errores de borradores que Ollama generó antes.
+- Si ninguna regla se sustenta, solo se utiliza una oración extractiva
+  completa que conserve al menos dos términos relevantes de la premisa
+  y pase el control editorial; si tampoco existe, se recurre al modelo.
+- El JSON conserva \`origen: REGLA_FIEL_A_PREMISA\` o
+  \`EXTRACTIVO_BORRADOR\`, nunca finge que Ollama creó esa frase.
+- El resumen indica \`metodo_gancho\` y cuenta como llamadas a Ollama
+  solo las solicitudes realmente enviadas al modelo.
+- El desarrollo y el cierre **aún necesitan Ollama**. La duración, la
+  continuidad argumental y la calidad del resultado deben verificarse;
+  la ruta alternativa no garantiza que toda la narración sea apta.
+
+### Prueba siguiente, con salida nueva
+
+En la Terminal de la Mac, desde el worktree aislado:
+
+~~~sh
+cd "$HOME/Barriga-IA-Pruebas"
+git fetch origin feature/barriga-ia-calendario-30-dias-20261023
+git switch --detach FETCH_HEAD
+python3 -m unittest discover -s tests -p 'test_barriga_ia_por_bloques.py' -v
+python3 tools/barriga_ia_por_bloques.py \
+  --revisar-archivo local-data/narrativa/cuarta-prueba.json \
+  --estrategia-gancho reglas-primero \
+  --premisa "Un hombre encuentra una carta de su hermano desaparecido hace treinta años, pero descubre que alguien la escribió ayer" \
+  --duracion 35 --max-intentos 2 \
+  --salida local-data/narrativa/septima-prueba.json
+~~~
+
+No se sobrescriben las pruebas anteriores. Si \`septima-prueba.json\`
+ya existe se solicita otro nombre. Este ciclo puede parar después del
+bloque historia o cierre si Ollama no cumple los límites; eso es
+información real útil, NO debe declararse terminada una pieza incompleta.
+
+Las pruebas unitarias de esta ruta comprueban la falta de atribución
+inventada, fidelidad textual, conservación del borrador original y
+trazabilidad de cada bloque. Se prueban con respuestas simuladas, no
+con generación en la Mac: la validación real sigue pendiente.
