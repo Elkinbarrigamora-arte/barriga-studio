@@ -123,3 +123,39 @@ el archivo al probar un segundo guion: usar `segunda-prueba.json`.
 
 **Pendiente:** ejecutar producción real en la Mac con el prompt nuevo y revisar
 la calidad narrativa humana de personajes, causalidad y cierre.
+
+## Segunda prueba real en Mac — afinamiento v0.3
+
+El segundo guion («La carta del pasado») redujo la extensión de 175 a
+**103 palabras**, equivalente a **41,2 segundos estimados**, pero todavía
+sobrepasa los 35 segundos solicitados. El evaluador antiguo marcó 87/100
+y `REVISION_HUMANA_PENDIENTE` aunque el cierre era genérico y existía
+una posible falta ortográfica («forgero»).
+
+### Correcciones implementadas en la rama experimental
+
+- Presupuesto más preciso: 35 segundos = aproximadamente 88 palabras;
+  intervalo de solicitud **79–97 palabras** (±10%).
+- Bloqueo por diferencia superior al máximo entre tres segundos o el
+  12% del objetivo. Para 35 segundos, diferencias superiores a **4,2 s**
+  llevan a `DEVOLVER_PARA_CORRECCION`: el resultado de 41,2 s queda bloqueado.
+- Alertas heurísticas de muletillas como «resuelven el caso» y «después
+  de una serie de», y posibles erratas detectables como «forgero».
+- Aviso sobre fichas de continuidad vacías cuando hay personajes.
+- El resultado es un **filtro preliminar**, no una garantía de
+  causalidad, atractivo emocional, exactitud o potencial viral.
+- Se agregaron pruebas de regresión con exactamente 103 palabras,
+  comprobación de bloqueos de duración y avisos editoriales.
+
+La revisión del segundo guion **no modifica ni borra su archivo local**:
+
+~~~sh
+cd "$HOME/Barriga-IA-Pruebas"
+python3 tools/barriga_ia_narrativa.py \
+  --evaluar local-data/narrativa/segunda-prueba.json \
+  --duracion 35
+~~~
+
+Cuando lo devuelva para corrección, no significa que haya fallado Ollama:
+significa que el control editorial detectó un resultado no apto.
+Conservar la primera y la segunda prueba para comparar con la tercera.
