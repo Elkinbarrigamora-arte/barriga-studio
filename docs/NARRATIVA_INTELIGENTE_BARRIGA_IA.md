@@ -270,3 +270,49 @@ automática: se necesita revisión humana y verificación de fuentes.
   continuidad de personajes y calidad humana antes de producción.
 - El total máximo de 6 llamadas puede consumir minutos en un Mac sin GPU
   dedicada; no utilizar APIs de pago.
+
+
+## Quinta prueba real: gancho rechazado (v0.6)
+
+El control por secciones corrió y **10 pruebas locales pasaron**, pero
+Ollama no entregó un gancho entre **5 y 8 palabras** en dos intentos.
+El informe quedó en \`local-data/narrativa/quinta-prueba.json\`, con
+\`BLOQUE_RECHAZADO_GANCHO\` y sin guion final. Esto es una falla de
+generación **real**, no de las pruebas simuladas. La herramienta no
+inventó aprobación.
+
+### Ajustes posteriores, todavía sin validar en Ollama real
+
+- El prompt del gancho ahora es muy corto, emplea únicamente la premisa
+  pertinente y muestra un ejemplo de **longitud** sin copiar el tema.
+- Se reduce el presupuesto de generación para el gancho (75 tokens), y
+  se diferencian los presupuestos para historia y cierre.
+- El JSON anterior se preserva intacto. El usuario puede proporcionar
+  voluntariamente un \`--gancho-aprobado\` de 5 a 8 palabras para seguir
+  probando historia y cierre sin atascarse en el primer bloque.
+  **El gancho manual no se presenta como generado por Ollama.**
+- El control no recorta frases automáticamente ni acepta ganchos demasiado
+  largos, pues podrían perder coherencia o sentido.
+- **Estas mejoras requieren prueba real en la Mac.**
+
+### Diagnóstico de la quinta prueba sin generar nada nuevo
+
+~~~sh
+cd "$HOME/Barriga-IA-Pruebas"
+python3 -c 'import json; p=json.load(open("local-data/narrativa/quinta-prueba.json")); [print("Intento", x["intento"], "Palabras", x["palabras"], "Texto", repr(x["texto"]), "Error", x.get("error","")) for x in p["historial_bloques"]]'
+~~~
+
+### Sexta prueba del gancho revisado (después de la inspección)
+
+Actualizar el worktree y cambiar el archivo de salida por uno nuevo,
+por ejemplo \`sexta-prueba.json\`. No volver a apuntar al quinto archivo:
+se trata de un resultado histórico.
+
+Si un gancho creado y **aprobado por una persona** debe utilizarse, se
+puede pasar \`--gancho-aprobado "¡La carta de ayer rompió treinta años!"\`
+(8 palabras) para saltar únicamente el bloque de gancho. Esta opción
+no resuelve por sí sola la autonomía completa del motor narrativo.
+
+La duración es aproximada: 150 palabras/minuto. La aprobación final
+requiere verificar narración con voz real, pertinencia, continuidad,
+gancho y final; ningún puntaje implica viralidad.
