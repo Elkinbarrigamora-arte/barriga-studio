@@ -221,13 +221,15 @@ def generar_texto_local(prompt, modelo=MODELO, timeout=150,
 
 
 def ensamblar_por_bloques(original, duracion=35, modelo=MODELO,
-                          max_intentos=2, generador=generar_texto_local,
+                          max_intentos=2, generador=None,
                           gancho_aprobado=None):
     """Máximo seis llamadas y ningún recorte ciego de frases/palabras.
 
     Preserva todos los intentos y produce guion completo SOLO si se
     generaron gancho, historia y cierre dentro de sus límites.
     """
+    if generador is None:
+        generador = generar_texto_local
     if type(max_intentos) is not int or not 1 <= max_intentos <= 2:
         raise ErrorNarrativa("Se permiten 1 o 2 intentos por bloque")
     if not isinstance(original, dict):
