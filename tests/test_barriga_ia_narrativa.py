@@ -297,6 +297,29 @@ class PruebasNarrativa(unittest.TestCase):
             self.assertEqual(saved["intentos_realizados"], 2)
             self.assertTrue(saved["evaluacion"]["apto_para_revision_humana"])
 
+    def test_resumen_compacto_y_archivo_completo(self):
+        largo = ejemplo()
+        largo["historia"] += " Otra descripción innecesaria del puerto." * 20
+        with tempfile.TemporaryDirectory() as temp:
+            anterior = Path(temp) / "tercera-prueba.json"
+            posterior = Path(temp) / "cuarta-prueba.json"
+            anterior.write_text(json.dumps({"guion": largo}), encoding="utf-8")
+            with patch("sys.argv", ["narrativa.py", "--revisar-archivo",
+                                    str(anterior), "--resumen", "--salida",
+                                    str(posterior)]):
+                with patch("barriga_ia_narrativa.generar_local",
+                           return_value=(ejemplo(), [])):
+                    with patch("sys.stdout", new_callable=io.StringIO) as salida:
+                        codigo = main()
+            self.assertEqual(codigo, 0)
+            corto = json.loads(salida.getvalue())
+            self.assertEqual(corto["intentos"], 2)
+            self.assertEqual(corto["estado"], "REVISION_HUMANA_PENDIENTE")
+            self.assertFalse(corto["publicacion_automatica_autorizada"])
+            self.assertNotIn("historial_intentos", corto)
+            completo = json.loads(posterior.read_text(encoding="utf-8"))
+            self.assertEqual(len(completo["historial_intentos"]), 2)
+
     def test_rechazar_sobrescribir_fuente_antes_de_llamar_ollama(self):
         with tempfile.TemporaryDirectory() as temp:
             anterior = Path(temp) / "tercera-prueba.json"
