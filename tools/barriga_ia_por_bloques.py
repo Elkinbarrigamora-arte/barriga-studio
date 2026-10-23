@@ -43,21 +43,23 @@ def limites_de_bloques(duracion):
 def prompt_para_bloque(nombre, original, generado, limites, anterior=None):
     """Pedir una sola parte; no pasar todas las instrucciones largas antiguas."""
     minimo, maximo = limites[nombre]
-    contextos = {
-        "gancho": {
+    if nombre == "gancho":
+        contexto = {
             "premisa": original.get("gancho", ""),
             "conflicto": original.get("historia", "")[:550],
             "instruccion": "Impacto inmediato, sin resolver el misterio.",
-        },
-        "historia": {
+        }
+    elif nombre == "historia":
+        contexto = {
             "gancho_definitivo": generado["gancho"],
             "borrador_de_desarrollo": original.get("historia", "")[:1600],
             "instruccion": (
                 "Acciones visibles, secuencia causal, conserva parentescos y "
                 "el mismo misterio; prepara un desenlace revelador."
             ),
-        },
-        "cierre": {
+        }
+    elif nombre == "cierre":
+        contexto = {
             "gancho_definitivo": generado["gancho"],
             "desarrollo_definitivo": generado["historia"],
             "cierre_original": original.get("cierre", "")[:450],
@@ -65,8 +67,9 @@ def prompt_para_bloque(nombre, original, generado, limites, anterior=None):
                 "Revelación concreta que responda al conflicto; sin moralejas "
                 "ni finales genéricos. Sin personajes nuevos."
             ),
-        },
-    }
+        }
+    else:
+        raise ErrorNarrativa("Bloque desconocido: " + str(nombre))
     payload = {
         "rol": "Guionista de microvideo en español latinoamericano",
         "seccion": nombre,
@@ -77,7 +80,7 @@ def prompt_para_bloque(nombre, original, generado, limites, anterior=None):
         "titulo_original": original.get("titulo", ""),
         "personajes_ya_definidos": original.get("personajes", []),
         "naturaleza": original.get("naturaleza"),
-        "datos": contextos[nombre],
+        "datos": contexto,
         "forma": 'Una sola frase o pasaje breve dentro de {"texto": "..."}',
         "restricciones": [
             "Solo responder JSON valido con campo texto",
@@ -225,15 +228,15 @@ def main():
     try:
         if args.revisar_archivo.resolve() == args.salida.resolve():
             raise ErrorNarrativa("No se permite sobrescribir el guion original")
+        if args.salida.exists():
+            raise ErrorNarrativa(
+                "La salida ya existe: elige otro nombre para conservar trabajos")
         original = leer_guion_guardado(args.revisar_archivo)
         resultado = ensamblar_por_bloques(
             original, duracion=args.duracion,
             max_intentos=args.max_intentos, modelo=args.modelo)
         resultado["fecha_revision"] = datetime.utcnow().isoformat() + "Z"
         args.salida.parent.mkdir(parents=True, exist_ok=True)
-        if args.salida.exists():
-            raise ErrorNarrativa(
-                "La salida ya existe: elige otro nombre para conservar trabajos")
         with args.salida.open("x", encoding="utf-8") as f:
             json.dump(resultado, f, ensure_ascii=False, indent=2)
             f.write("\n")
