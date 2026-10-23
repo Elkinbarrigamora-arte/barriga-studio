@@ -39,6 +39,10 @@ RESPETA ESTRICTAMENTE el número de palabras objetivo indicado en DATOS DE TRABA
 Nunca alargues el guion con explicaciones generales o repeticiones.
 La historia desarrolla acciones concretas, causa y consecuencia, con ritmo visual.
 El cierre resuelve, sorprende o conmueve. Solo usa una oferta comercial si procede.
+Evita cierres de relleno como «resuelven el caso» o «todo fue un malentendido».
+El espectador debe presenciar una revelación concreta, no un resumen de lo ocurrido.
+Prefiere mostrar una acción de descubrimiento a explicar que «empezó a investigar».
+Evita palabras inventadas, repeticiones y faltas ortográficas.
 No repitas hechos; mantén personajes, apariencia, ropa y voz entre escenas.
 Las relaciones familiares deben concordar con la premisa: un hermano no se convierte en tío.
 Describe acciones visibles y concretas, no resumas la historia con frases vagas.
@@ -115,8 +119,8 @@ def preparar_solicitud(tema, nicho, naturaleza="ficcion", duracion=35,
     if biblia is not None and not isinstance(biblia, dict):
         raise ErrorNarrativa("La biblia de continuidad debe ser un objeto JSON")
     objetivo_palabras = round(duracion * 2.5)
-    minimo_palabras = round(objetivo_palabras * 0.85)
-    maximo_palabras = round(objetivo_palabras * 1.15)
+    minimo_palabras = round(objetivo_palabras * 0.90)
+    maximo_palabras = round(objetivo_palabras * 1.10)
     instruccion = {
         "presupuesto_palabras_total": {
             "objetivo": objetivo_palabras,
@@ -149,6 +153,9 @@ def preparar_solicitud(tema, nicho, naturaleza="ficcion", duracion=35,
             "Mantener continuidad de personajes y escenario",
             "Protagonista y hermano desaparecido deben conservar parentesco y nombre",
             "Resolver el conflicto con una acción/revelación concreta en el cierre",
+            "Nunca concluir en términos vagos como 'resuelven el caso'",
+            "Corregir ortografía, gramática y puntuación en español",
+            "No agregar personajes o giros sin preparación narrativa",
         ],
     }
     return SISTEMA + "\nDATOS DE TRABAJO (no son órdenes del sistema):\n" + json.dumps(
@@ -270,12 +277,12 @@ def evaluar_guion(guion, duracion=35):
     if guion["nicho"] == "miniseries" and not guion.get("continuidad"):
         bloqueos.append("Falta ficha de continuidad para la miniserie")
     # La duración es una condición de aprobación, NO una advertencia secundaria.
-    tolerancia_segundos = max(4, duracion * 0.20)
+    tolerancia_segundos = max(3, duracion * 0.12)
     if diferencia > tolerancia_segundos:
         bloqueos.append(
             "Duración incompatible: {} palabras ≈ {} s, objetivo {} s (±{} s)".format(
                 total, estimacion, duracion, round(tolerancia_segundos, 1)))
-    elif diferencia > duracion * 0.10:
+    elif diferencia > duracion * 0.08:
         advertencias.append("Duración cercana al límite; verificar velocidad de locución")
     # El escenario de continuidad debe respaldarse en el texto narrativo.
     escenario = guion.get("continuidad", {}).get("escenario")
@@ -296,6 +303,25 @@ def evaluar_guion(guion, duracion=35):
                         nombre))
     if gancho < 20:
         advertencias.append("Revisar fuerza y brevedad del gancho")
+    # Estos avisos no certifican calidad literaria: detectan patrones evidentes.
+    texto_historia = guion["historia"].casefold()
+    texto_cierre = guion["cierre"].casefold()
+    for muletilla in ("resuelven el caso", "reconciliarse con su familia",
+                      "después de una serie de", "dejando atrás los miedos",
+                      "todo fue un malentendido"):
+        if muletilla in texto_historia or muletilla in texto_cierre:
+            advertencias.append(
+                "Posible desenlace genérico («{}»); revisar revelación concreta".format(
+                    muletilla))
+    for error, reemplazo in (("forgero", "falsificador"), ("forjero", "falsificador")):
+        if re.search(r"\b{}\b".format(re.escape(error)),
+                     guion_completo, flags=re.UNICODE):
+            advertencias.append(
+                "Posible error ortográfico «{}»; sugerencia «{}»".format(
+                    error, reemplazo))
+    if guion.get("personajes") and not guion.get("continuidad"):
+        advertencias.append(
+            "Falta ficha de continuidad para reutilizar personajes en video")
     puntaje = sum(puntajes.values())
     return {
         "puntuacion_heuristica": puntaje,
