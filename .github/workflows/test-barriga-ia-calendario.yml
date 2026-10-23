@@ -6,8 +6,10 @@ on:
       - 'tests/test_barriga_ia_calendario.py'
       - 'tools/barriga_ia_narrativa.py'
       - 'tools/barriga_ia_por_bloques.py'
+      - 'tools/barriga_ia_continuar.py'
       - 'tests/test_barriga_ia_narrativa.py'
       - 'tests/test_barriga_ia_por_bloques.py'
+      - 'tests/test_barriga_ia_continuar.py'
       - '.github/workflows/test-barriga-ia-calendario.yml'
   workflow_dispatch:
 
@@ -31,3 +33,4 @@ jobs:
           python -m unittest discover -s tests -p 'test_barriga_ia_calendario.py' -v
           python -m unittest discover -s tests -p 'test_barriga_ia_narrativa.py' -v
           python -m unittest discover -s tests -p 'test_barriga_ia_por_bloques.py' -v
+          python -m unittest discover -s tests -p 'test_barriga_ia_continuar.py' -v
