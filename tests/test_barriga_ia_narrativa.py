@@ -8,7 +8,7 @@ from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tools"))
 from barriga_ia_narrativa import (ErrorNarrativa, NICHOS, evaluar_guion,
-                                  generar_local, preparar_solicitud)
+                                  generar_local, preparar_solicitud, normalizar_formato)
 
 
 GANCHO = "¡La última carta de su hermano llegó treinta años después del naufragio!"
@@ -97,6 +97,74 @@ class PruebasNarrativa(unittest.TestCase):
                 rep = evaluar_guion(ejemplo(nicho=nicho))
                 self.assertTrue(rep["apto_para_revision_humana"])
                 self.assertEqual(rep["duracion_objetivo"], 35)
+
+    def test_regresion_personajes_devuelto_como_objeto(self):
+        # Error real de la Mac: Ollama entregó personajes distinto de lista.
+        guion = ejemplo()
+        guion["personajes"] = {"Daniel": {"rol": "protagonista"},
+                               "Mateo": "hermano"}
+        reparado, cambios = normalizar_formato(guion)
+        self.assertEqual([p["nombre"] for p in reparado["personajes"]],
+                         ["Daniel", "Mateo"])
+        self.assertTrue(cambios)
+        self.assertTrue(evaluar_guion(reparado)["apto_para_revision_humana"])
+
+    def test_reparacion_conservadora_de_texto_y_continuidad(self):
+        guion = ejemplo()
+        guion["personajes"] = "Daniel y su hermano Mateo"
+        guion["continuidad"] = "El faro y el mismo vestuario"
+        guion["fuentes"] = ""
+        reparado, cambios = normalizar_formato(guion)
+        self.assertEqual(reparado["personajes"],
+                         [{"descripcion": "Daniel y su hermano Mateo"}])
+        self.assertEqual(reparado["continuidad"],
+                         {"notas": "El faro y el mismo vestuario"})
+        self.assertEqual(reparado["fuentes"], [])
+        self.assertGreaterEqual(len(cambios), 2)
+        self.assertFalse(evaluar_guion(reparado)["publicacion_automatica_autorizada"])
+
+    def test_lista_de_nombres_y_duracion_numerica(self):
+        guion = ejemplo()
+        guion["personajes"] = ["Daniel", "Mateo"]
+        guion["duracion_objetivo_segundos"] = "35"
+        reparado, ajustes = normalizar_formato(guion)
+        self.assertEqual(reparado["personajes"], [{"nombre": "Daniel"}, {"nombre": "Mateo"}])
+        self.assertEqual(reparado["duracion_objetivo_segundos"], 35)
+        self.assertTrue(ajustes)
+
+    def test_esquema_json_solicita_array_personajes(self):
+        salida = {"response": json.dumps(ejemplo(), ensure_ascii=False)}
+        class FakeResponse:
+            def __enter__(self):
+                return self
+            def __exit__(self, *_):
+                return False
+            def read(self):
+                return json.dumps(salida).encode("utf-8")
+        def simular(request, timeout):
+            datos = json.loads(request.data)
+            self.assertEqual(datos["format"]["properties"]["personajes"]["type"], "array")
+            self.assertEqual(datos["format"]["properties"]["continuidad"]["type"], "object")
+            self.assertEqual(datos["format"]["properties"]["fuentes"]["type"], "array")
+            return FakeResponse()
+        with patch("barriga_ia_narrativa.urlopen", side_effect=simular):
+            self.assertEqual(generar_local("prueba")["titulo"], "La carta bajo el faro")
+
+    def test_generar_local_corrige_personajes_antes_de_evaluar(self):
+        guion = ejemplo()
+        guion["personajes"] = {"nombre": "Daniel"}
+        salida = {"response": json.dumps(guion, ensure_ascii=False)}
+        class FakeResponse:
+            def __enter__(self):
+                return self
+            def __exit__(self, *_):
+                return False
+            def read(self):
+                return json.dumps(salida).encode("utf-8")
+        with patch("barriga_ia_narrativa.urlopen", return_value=FakeResponse()):
+            producido = generar_local("prueba")
+            self.assertEqual(producido["personajes"], [{"nombre": "Daniel"}])
+            self.assertTrue(evaluar_guion(producido)["apto_para_revision_humana"])
 
     def test_ollama_solo_solicitud_local_y_json(self):
         salida = {"response": json.dumps(ejemplo(), ensure_ascii=False)}
