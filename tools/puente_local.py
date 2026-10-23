@@ -42,6 +42,7 @@ PANEL = r'''
        if(!resp.ok)throw Error(data.error||('Error HTTP '+resp.status));
        field.value='GANCHO\n'+data.gancho+'\n\nHISTORIA\n'+data.historia+
                    '\n\nOFERTA O CIERRE\n'+data.oferta_cierre;
+       field.dispatchEvent(new Event('input', { bubbles:true }));
        msg.textContent='Guion generado por '+data.modelo+' en '+data.segundos+
          ' segundos. Revísalo antes de guardarlo.';
      }catch(error){msg.textContent='No se pudo generar: '+error.message}
@@ -103,6 +104,13 @@ def servidor(studio, token, puerto, modelo):
                 html = html.replace("</body>", PANEL.replace("__TOKEN__",
                                       json.dumps(token))+"</body>")
                 self.send(200, html, "text/html; charset=utf-8")
+            elif self.path == "/assets/studio-mejoras.js":
+                asset = studio / "assets" / "studio-mejoras.js"
+                if not asset.is_file():
+                    self.send(404, {"error": "Módulo de mejoras no encontrado"})
+                else:
+                    self.send(200, asset.read_text(encoding="utf-8"),
+                              "text/javascript; charset=utf-8")
             elif self.path == "/api/health":
                 self.send(200, {"servidor": "OK", "modelo_solicitado": modelo,
                                 "inferencia_real_comprobada": False,
