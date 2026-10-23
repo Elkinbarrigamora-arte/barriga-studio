@@ -36,11 +36,13 @@
     const duration = durations.includes(project.duration) ? project.duration : durations[0];
     const voice = voices.includes(project.voice) ? project.voice : voices[0];
     const date = String(project.date || stamp()).slice(0, 100);
+    const scenes = Array.isArray(project.scenes) ? project.scenes.filter(v => typeof v === 'string').slice(0,100).map(v => v.slice(0,1000)) : [];
+    const characters = Array.isArray(project.characters) ? project.characters.filter(v => typeof v === 'string').slice(0,100).map(v => v.slice(0,1000)) : [];
     return { id: (typeof project.id === "number" || typeof project.id === "string") ?
-      project.id : uniqueId(), name, script, style, format, duration, voice, date };
+      project.id : uniqueId(), name, script, style, format, duration, voice, scenes, characters, date };
   };
   const fingerprint = (p) => JSON.stringify([
-    p.name, p.script, p.style, p.format, p.duration, p.voice
+    p.name, p.script, p.style, p.format, p.duration, p.voice, p.scenes || [], p.characters || []
   ]);
   const status = (message, error = false) => {
     const el = document.getElementById("respaldo-status");
