@@ -53,9 +53,7 @@ def guard_path(root, rel):
     allowed = (rel == 'index.html' or
                (rel.startswith('assets/') and rel.endswith(('.js', '.css'))) or
                (rel.startswith('docs/') and rel.endswith('.md')) or
-               (rel.startswith('tests/') and rel.endswith('.py')) or
-               (rel.startswith('tools/') and rel.endswith('.py') and
-                rel != 'tools/agente_desarrollo.py'))
+               (rel.startswith('tests/') and rel.endswith('.py')))
     if not allowed:
         raise ValueError('Archivo no autorizado: ' + rel)
     path = (root / rel).resolve()
@@ -90,6 +88,11 @@ def ask_model(task, current, model):
         'Para archivos NUEVOS usa contenido; para existentes usa buscar y reemplazar literal exacto, '
         'sin omitir contenido. Hasta TRES cambios por iteración. '
         'No inventes servicios de video, sincronización, voces ni funcionalidades no conectadas. '
+        'Solo edita index.html, assets/, docs/ o tests/. '
+        'NO propongas cambios de tools/puente_local.py ni de otros archivos tools/. '
+        'Si usas buscar/reemplazar, copia exactamente un fragmento visible del archivo actual; '
+        'no reescribas fragmentos supuestos, recortados u omitidos. '
+        'Prioriza crear un módulo JS en assets/ y enlazarlo desde index.html. '
         'No toques datos privados, versiones históricas ni herramientas del agente. '
         'Conserva nombres de controles, IDs HTML y funciones existentes. '
         'Código ejecutable y profesional; evita funciones vacías, ejemplos falsos y promesas. '
@@ -212,8 +215,20 @@ def run_stage(root, name, goal, model):
     backup = 'backup/barriga-ia-' + datetime.now().strftime('%Y%m%d-%H%M%S-%f')
     git(root, 'branch', backup)
     print('Respaldo Git: ' + backup, flush=True)
-    answer = ask_model(goal, context(root, goal), model)
-    planned = plan_changes(root, answer['cambios'])
+    planned = None
+    error_feedback = ''
+    for attempt in range(1, 4):
+        task = goal + error_feedback
+        answer = ask_model(task, context(root, task), model)
+        try:
+            planned = plan_changes(root, answer['cambios'])
+            break
+        except ValueError as exc:
+            if attempt == 3:
+                raise RuntimeError('Tres propuestas no aplicables; no se editó ningún archivo: ' + str(exc)) from exc
+            print('Parche rechazado (' + str(attempt) + '/3): ' + str(exc) + '. Reintentando...', flush=True)
+            error_feedback = ('\\nATENCIÓN: la propuesta anterior se rechazó: ' + str(exc) +
+                              '. Usa fragmentos literales exactos visibles y rutas permitidas.')
     previous = {rel: (root / rel).read_text(encoding='utf-8') if (root / rel).exists() else None
                 for rel in planned}
     try:
