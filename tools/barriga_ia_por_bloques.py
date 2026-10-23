@@ -44,10 +44,12 @@ def prompt_para_bloque(nombre, original, generado, limites, anterior=None):
     """Pedir una sola parte; no pasar todas las instrucciones largas antiguas."""
     minimo, maximo = limites[nombre]
     if nombre == "gancho":
+        # Evitar pasar el relato completo: favorece respuestas largas en modelos pequeños.
+        # El gancho debe atacar el conflicto que ya aparece en el borrador.
         contexto = {
-            "premisa": original.get("gancho", ""),
-            "conflicto": original.get("historia", "")[:550],
-            "instruccion": "Impacto inmediato, sin resolver el misterio.",
+            "gancho_original": original.get("gancho", "")[:260],
+            "titulo": original.get("titulo", ""),
+            "instruccion": "Una oración muy breve, con intriga y sin revelar el final.",
         }
     elif nombre == "historia":
         contexto = {
@@ -93,10 +95,27 @@ def prompt_para_bloque(nombre, original, generado, limites, anterior=None):
     }
     if anterior:
         payload["intento_anterior_rechazado"] = {
-            "texto": anterior["texto"][:700],
+            "texto": anterior["texto"][:120],
             "palabras": anterior["palabras"],
             "motivo": "No cumple el mínimo y máximo del bloque",
         }
+    if nombre == "gancho":
+        # Prompt compacto y ejemplo de LONGITUD, no de hechos de la historia.
+        ej = '{"texto": "¡La carta de ayer reveló algo imposible!"}'
+        contexto_corto = json.dumps({
+            "titulo": original.get("titulo", ""),
+            "gancho_original": original.get("gancho", "")[:180],
+            "anterior_rechazado": (
+                {"palabras": anterior["palabras"],
+                 "texto": anterior["texto"][:90]} if anterior else None),
+        }, ensure_ascii=False)
+        return (
+            "Eres un editor de titulares de suspenso. Escribe UNA sola oración "
+            "original sobre la premisa indicada, de 5 a 8 palabras. "
+            "Ejemplo de LONGITUD (no copies su contenido): " + ej + ". "
+            "Prohibido incluir historia, explicación, moraleja o más de una oración. "
+            "Solo JSON con un campo texto. Premisa: " + contexto_corto
+        )
     instruccion = (
         "ESCRIBE SOLO LA SECCION '{}' DE UNA HISTORIA PARA REEL. "
         "Debe contener ENTRE {} Y {} PALABRAS, ambas inclusive. "
@@ -107,7 +126,7 @@ def prompt_para_bloque(nombre, original, generado, limites, anterior=None):
     return instruccion + json.dumps(payload, ensure_ascii=False, sort_keys=True)
 
 
-def generar_texto_local(prompt, modelo=MODELO, timeout=150):
+def generar_texto_local(prompt, modelo=MODELO, timeout=150, num_predict=240):
     """Llamada únicamente a la instancia local de Ollama, sin APIs pagas."""
     datos = {
         "model": modelo,
@@ -117,7 +136,7 @@ def generar_texto_local(prompt, modelo=MODELO, timeout=150):
         "options": {
             "temperature": 0.2,
             "num_ctx": 4096,
-            "num_predict": 240,
+            "num_predict": num_predict,
         },
     }
     req = Request(
@@ -139,7 +158,8 @@ def generar_texto_local(prompt, modelo=MODELO, timeout=150):
 
 
 def ensamblar_por_bloques(original, duracion=35, modelo=MODELO,
-                          max_intentos=2, generador=generar_texto_local):
+                          max_intentos=2, generador=generar_texto_local,
+                          gancho_aprobado=None):
     """Máximo seis llamadas y ningún recorte ciego de frases/palabras.
 
     Preserva todos los intentos y produce guion completo SOLO si se
@@ -154,6 +174,15 @@ def ensamblar_por_bloques(original, duracion=35, modelo=MODELO,
         raise ErrorNarrativa(
             "Prohibido reescribir automáticamente información factual o noticias")
     limites = limites_de_bloques(duracion)
+    if gancho_aprobado is not None:
+        if not isinstance(gancho_aprobado, str):
+            raise ErrorNarrativa("El gancho aportado debe ser texto")
+        gancho_aprobado = " ".join(gancho_aprobado.split())
+        menor, mayor = limites["gancho"]
+        if not menor <= contar_palabras(gancho_aprobado) <= mayor:
+            raise ErrorNarrativa(
+                "El gancho indicado debe contener entre {} y {} palabras".format(
+                    menor, mayor))
     resultado = {
         "guion_original": original,
         "evaluacion_original": evaluacion_original,
@@ -167,13 +196,31 @@ def ensamblar_por_bloques(original, duracion=35, modelo=MODELO,
         "nota": "Control de longitud, no verificación semántica ni prueba de viralidad",
     }
     aprobados = {}
+    if gancho_aprobado:
+        aprobados["gancho"] = gancho_aprobado
+        resultado["bloques_aprobados_en_longitud"]["gancho"] = contar_palabras(
+            gancho_aprobado)
+        resultado["historial_bloques"].append({
+            "bloque": "gancho", "intento": 0, "texto": gancho_aprobado,
+            "palabras": contar_palabras(gancho_aprobado),
+            "limites": list(limites["gancho"]), "longitud_valida": True,
+            "origen": "APROBADO_MANUALMENTE",
+        })
     for bloque in ("gancho", "historia", "cierre"):
+        if bloque in aprobados:
+            continue
         previo = None
         exitoso = False
         for numero in range(1, max_intentos + 1):
             prompt = prompt_para_bloque(bloque, original, aprobados, limites, previo)
             try:
-                texto = generador(prompt, modelo=modelo)
+                if generador is generar_texto_local:
+                    limite_tokens = {"gancho": 75, "historia": 230,
+                                     "cierre": 115}[bloque]
+                    texto = generador(
+                        prompt, modelo=modelo, num_predict=limite_tokens)
+                else:
+                    texto = generador(prompt, modelo=modelo)
                 palabras = contar_palabras(texto)
                 minimo, maximo = limites[bloque]
                 valido = minimo <= palabras <= maximo
@@ -222,6 +269,8 @@ def main():
     parser.add_argument("--duracion", type=int, default=35)
     parser.add_argument("--max-intentos", type=int, default=2)
     parser.add_argument("--modelo", default=MODELO)
+    parser.add_argument("--gancho-aprobado", default=None,
+                        help="Gancho manual de 5 a 8 palabras para saltar su generación")
     args = parser.parse_args()
 
     try:
@@ -233,7 +282,8 @@ def main():
         original = leer_guion_guardado(args.revisar_archivo)
         resultado = ensamblar_por_bloques(
             original, duracion=args.duracion,
-            max_intentos=args.max_intentos, modelo=args.modelo)
+            max_intentos=args.max_intentos, modelo=args.modelo,
+            gancho_aprobado=args.gancho_aprobado)
         resultado["fecha_revision"] = datetime.utcnow().isoformat() + "Z"
         args.salida.parent.mkdir(parents=True, exist_ok=True)
         with args.salida.open("x", encoding="utf-8") as f:
@@ -246,7 +296,9 @@ def main():
             "palabras_finales": eval_final["palabras"] if eval_final else None,
             "segundos_finales": eval_final["segundos_estimados"] if eval_final else None,
             "objetivo_segundos": args.duracion,
-            "numero_llamadas_ollama": len(resultado["historial_bloques"]),
+            "numero_llamadas_ollama": sum(
+                1 for intento in resultado["historial_bloques"]
+                if intento.get("origen") != "APROBADO_MANUALMENTE"),
             "bloques_aprobados_en_longitud": resultado["bloques_aprobados_en_longitud"],
             "bloqueos": eval_final["bloqueos"] if eval_final else [],
             "advertencias": eval_final["advertencias"] if eval_final else [],
