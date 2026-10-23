@@ -103,7 +103,8 @@ class CalendarioIA:
                 "SELECT COUNT(*) FROM videos WHERE estado != 'ARCHIVADO'"
                 ).fetchone()[0] >= MAX_VIDEOS:
             raise ErrorCalendario("Almacén lleno (30). Archiva manualmente antes de añadir")
-        digest = hashlib.file_digest(ruta.open("rb"), "sha256").hexdigest()
+        with ruta.open("rb") as source:
+            digest = hashlib.file_digest(source, "sha256").hexdigest()
         try:
             with self.conn:
                 self.conn.execute("""
