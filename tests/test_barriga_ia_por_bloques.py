@@ -254,6 +254,28 @@ class PruebasPorBloques(unittest.TestCase):
             [d["options"]["num_predict"] for d in cuerpos], [75, 75])
         self.assertNotEqual(cuerpos[0]["prompt"], cuerpos[1]["prompt"])
 
+    def test_terminal_informa_gancho_rechazado_y_motivos(self):
+        texto = "Daniel encontró una carta antigua en el viejo cajón de Pepe."
+        with tempfile.TemporaryDirectory() as temp:
+            origen = Path(temp) / "cuarta-prueba.json"
+            destino = Path(temp) / "sexta-prueba.json"
+            origen.write_text(json.dumps({"guion": original()},
+                                         ensure_ascii=False), encoding="utf-8")
+            argv = ["por_bloques.py", "--revisar-archivo", str(origen),
+                    "--salida", str(destino)]
+            with patch("sys.argv", argv):
+                with patch("barriga_ia_por_bloques.generar_texto_local",
+                           return_value=texto):
+                    with patch("sys.stdout", new_callable=io.StringIO) as stdout:
+                        code = main()
+            self.assertEqual(code, 2)
+            detalle = json.loads(stdout.getvalue())
+            self.assertEqual(detalle["ultimo_texto_rechazado"], texto)
+            self.assertTrue(any("repetida" in motivo
+                                for motivo in detalle["motivos_ultimo_rechazo"]))
+            self.assertTrue(destino.exists())
+            self.assertFalse(detalle["publicacion_automatica_autorizada"])
+
     def test_error_de_ollama_no_se_convierte_en_exito(self):
         def fallar(prompt, modelo):
             raise ErrorNarrativa("Ollama detenido")
