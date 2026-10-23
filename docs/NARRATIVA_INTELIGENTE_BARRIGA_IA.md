@@ -316,3 +316,51 @@ no resuelve por sí sola la autonomía completa del motor narrativo.
 La duración es aproximada: 150 palabras/minuto. La aprobación final
 requiere verificar narración con voz real, pertinencia, continuidad,
 gancho y final; ningún puntaje implica viralidad.
+
+
+## Diagnóstico de quinta prueba e intervención v0.7
+
+La inspección de la salida local mostró que ambos intentos fueron
+exactamente la misma oración de **11 palabras**:
+«Daniel encontró una carta antigua en el viejo cajón de Pepe».
+El gancho pierde además el giro temporal del caso (la carta fechada
+ayer), y «Pepe» no corresponde a los protagonistas de la premisa
+original proporcionada en la conversación.
+
+La v0.7 agrega:
+- Motivos explícitos de rechazo por duración, repetición literal y
+  posibles nombres nuevos ausentes del borrador de entrada.
+- Al detectar el giro de **ayer** en el borrador, el gancho debe
+  conservar esa pista o una expresión temporal equivalente.
+- El segundo intento ya no copia el primer prompt. Incluye las
+  razones concretas del rechazo, solicita una frase diferente y
+  aumenta la temperatura de 0,2 a 0,65 únicamente en ese segundo
+  intento; sigue sin exceder dos intentos por bloque.
+- Las restricciones de longitud y fidelidad a la premisa son
+  **heurísticas**, no un evaluador semántico infalible; deben
+  comprobarse por revisión humana.
+- La carpeta \`local-data\` sigue ignorada por Git, y ningún ensayo
+  puede activar la publicación de redes sociales.
+
+### Sexta prueba experimental
+
+Primero actualizar la carpeta aislada y pasar los tests. Después
+probar de nuevo el generador por bloques, tomando el borrador de
+la cuarta prueba (porque la quinta no contiene un guion final).
+La nueva salida debe ser \`sexta-prueba.json\` para conservar todo.
+
+~~~sh
+cd "$HOME/Barriga-IA-Pruebas" &&
+git fetch origin feature/barriga-ia-calendario-30-dias-20261023 &&
+git switch --detach FETCH_HEAD &&
+python3 -m unittest discover -s tests -p 'test_barriga_ia_por_bloques.py' -v &&
+python3 tools/barriga_ia_por_bloques.py \
+  --revisar-archivo local-data/narrativa/cuarta-prueba.json \
+  --duracion 35 \
+  --max-intentos 2 \
+  --salida local-data/narrativa/sexta-prueba.json
+~~~
+
+Aunque las pruebas automáticas pasen, todavía falta verificar el
+comportamiento con **Ollama local real** y evaluar narrativamente el
+gancho, el conflicto y el desenlace antes de darle uso audiovisual.
