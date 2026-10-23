@@ -11,19 +11,18 @@ from barriga_ia_narrativa import (ErrorNarrativa, NICHOS, evaluar_guion,
                                   generar_local, preparar_solicitud, normalizar_formato)
 
 
-GANCHO = "¡La última carta de su hermano llegó treinta años después del naufragio!"
+GANCHO = "¡La última carta de su hermano apareció treinta años después del naufragio!"
 HISTORIA = (
-    "Daniel encontró una caja oxidada enterrada junto al viejo muelle. "
-    "Dentro había una carta con la letra de Mateo, su hermano desaparecido. "
-    "Decía que la tormenta no había sido un accidente. "
-    "Daniel cruzó el pueblo buscando a la única persona que conocía la verdad. "
-    "La anciana del faro le entregó una fotografía donde aparecían los dos hermanos. "
-    "Sin embargo, alguien había escrito una fecha imposible detrás de la imagen. "
-    "Cuando Daniel llegó al faro, la luz se encendió aunque llevaba décadas apagada."
+    "Daniel halló una caja oxidada junto al muelle. "
+    "Dentro estaba la letra de Mateo, desaparecido aquella noche. "
+    "La carta decía: «No fue una tormenta». "
+    "Daniel recorrió el pueblo hasta encontrar a la antigua guardiana del faro. "
+    "Ella le mostró una fotografía de los dos hermanos y señaló una fecha imposible: ayer. "
+    "En ese instante, la luz del faro volvió a encenderse."
 )
 CIERRE = (
-    "Entonces comprendió que Mateo nunca abandonó el puerto. "
-    "La verdadera despedida apenas estaba comenzando."
+    "Daniel subió corriendo. Detrás de la puerta esperaba Mateo, envejecido y vivo. "
+    "El secreto apenas comenzaba."
 )
 
 
@@ -54,6 +53,8 @@ class PruebasNarrativa(unittest.TestCase):
         for palabra in ("GANCHO", "HISTORIA", "CIERRE", "No inventes fuentes"):
             self.assertIn(palabra, prompt)
         self.assertIn("continuidad", prompt.lower())
+        self.assertIn('"objetivo": 88', prompt)
+        self.assertIn('"maximo": 101', prompt)
 
     def test_evaluacion_ficcion_no_publica(self):
         resultado = evaluar_guion(ejemplo())
@@ -62,6 +63,7 @@ class PruebasNarrativa(unittest.TestCase):
         self.assertFalse(resultado["publicacion_automatica_autorizada"])
         self.assertFalse(resultado["verificacion_externa_realizada"])
         self.assertIn("gancho", resultado["desglose"])
+        self.assertEqual(resultado["estado_revision"], "REVISION_HUMANA_PENDIENTE")
 
     def test_factual_requiere_fuentes_y_no_afirma_verificacion(self):
         with self.assertRaises(ErrorNarrativa):
@@ -74,6 +76,35 @@ class PruebasNarrativa(unittest.TestCase):
             ejemplo("noticias", "factual", ["https://example.org/informe"]))
         self.assertFalse(con_fuente["verificacion_externa_realizada"])
         self.assertTrue(con_fuente["advertencias"])
+
+    def test_regresion_35_segundos_con_175_palabras_no_es_apto(self):
+        # Reproduce el fallo editorial visto con Ollama en la Mac.
+        guion = ejemplo()
+        guion["historia"] += " Investigó durante días sin encontrar respuestas." * 18
+        reporte = evaluar_guion(guion, 35)
+        self.assertGreater(reporte["segundos_estimados"], 42)
+        self.assertFalse(reporte["apto_para_revision_humana"])
+        self.assertEqual(reporte["estado_revision"], "DEVOLVER_PARA_CORRECCION")
+        self.assertTrue(any("Duración incompatible" in x for x in reporte["bloqueos"]))
+        self.assertFalse(reporte["publicacion_automatica_autorizada"])
+
+    def test_continuidad_sospechosa_generar_advertencias(self):
+        guion = ejemplo()
+        guion["continuidad"]["escenario"] = "Puerto"
+        guion["personajes"].append({
+            "nombre": "Tío Juan",
+            "descripcion": "hermano menor de Daniel desaparecido"
+        })
+        reporte = evaluar_guion(guion, 35)
+        self.assertTrue(any("Escenario" in x for x in reporte["advertencias"]))
+        self.assertTrue(any("parentesco" in x for x in reporte["advertencias"]))
+
+    def test_script_guardado_con_guion_anidado_se_puede_releer(self):
+        # Contrato de normalización después de extraer el campo guion del informe.
+        datos = {"guion": ejemplo(), "evaluacion": {"puntuacion_heuristica": 20}}
+        narracion, ajustes = normalizar_formato(datos["guion"])
+        self.assertFalse(ajustes)
+        self.assertTrue(evaluar_guion(narracion)["apto_para_revision_humana"])
 
     def test_miniseries_requiere_continuidad(self):
         with self.assertRaises(ErrorNarrativa):
