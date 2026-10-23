@@ -116,7 +116,24 @@ def proponer_gancho_seguro(original, limites, premisa=None):
     # No cortar por longitud ni crear nuevas relaciones/personajes.
     gancho_original = original.get("gancho", "")
     if isinstance(gancho_original, str):
+        palabras_premisa = set()
+        if premisa:
+            vacias = {"el", "la", "los", "las", "un", "una", "uno",
+                      "de", "del", "en", "por", "y", "o", "a", "que",
+                      "su", "sus", "con", "al", "se", "pero", "hace",
+                      "fue", "es", "como", "cuando", "lo"}
+            palabras_premisa = {
+                p for p in re.findall(r"\b\w+\b", premisa.casefold(),
+                                       flags=re.UNICODE)
+                if p not in vacias and len(p) >= 4
+            }
         for candidato in re.split(r"(?<=[.!?…])\s+", gancho_original.strip()):
+            if premisa:
+                palabras_candidato = set(re.findall(
+                    r"\b\w+\b", candidato.casefold(), flags=re.UNICODE))
+                # No aceptar un fragmento corto que ni siquiera trate la premisa.
+                if len(palabras_premisa & palabras_candidato) < 2:
+                    continue
             if (limites["gancho"][0] <= contar_palabras(candidato)
                     <= limites["gancho"][1]
                     and not detectar_problemas_editoriales(
