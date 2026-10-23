@@ -364,3 +364,48 @@ python3 tools/barriga_ia_por_bloques.py \
 Aunque las pruebas automáticas pasen, todavía falta verificar el
 comportamiento con **Ollama local real** y evaluar narrativamente el
 gancho, el conflicto y el desenlace antes de darle uso audiovisual.
+
+
+## Sexta prueba real: historia de 123 palabras y repetición (v0.7)
+
+El modelo local logró un **gancho aceptado de 7 palabras**.
+La historia siguió fallando: **123 palabras** para un intervalo esperado
+de 63–70. Ollama repitió el texto tras el rechazo y apareció «Pepe»,
+un personaje no justificado por la premisa. El informe registró
+\`BLOQUE_RECHAZADO_HISTORIA\` y no presentó la historia como apta.
+
+La herramienta independiente \`tools/barriga_ia_continuar.py\` permite
+reanudar **a partir de ese informe rechazado**. Recupera el último gancho
+marcado como \`aceptable_para_ensamblaje: true\` y valida de nuevo sus
+palabras. Sin regenerar el gancho:
+
+1. Genera la primera microescena de **31–35 palabras**.
+2. Continúa inmediatamente con otra de **32–35 palabras**.
+3. Cierra con una revelación de **13–18 palabras**.
+
+Cada fragmento admite hasta dos intentos y tiene su propio control
+de extensión y detección básica de errores. El informe conserva los
+intentos y los fragmentos ya aprobados. No se hace recorte mecánico
+de frases y no se borra ningún guion anterior.
+
+### Séptima prueba en la Mac
+
+~~~sh
+cd "$HOME/Barriga-IA-Pruebas"
+git fetch origin feature/barriga-ia-calendario-30-dias-20261023
+git switch --detach FETCH_HEAD
+python3 -m unittest discover -s tests -p 'test_barriga_ia_continuar.py' -v
+python3 tools/barriga_ia_continuar.py \
+  --desde local-data/narrativa/sexta-prueba.json \
+  --duracion 35 \
+  --max-intentos 2 \
+  --salida local-data/narrativa/septima-prueba.json
+~~~
+
+- El archivo de la sexta prueba debe permanecer intacto.
+- Se usa el servidor Ollama local, sin servicios de pago.
+- La puntuación y el tiempo en segundos siguen siendo **estimaciones**.
+- Ni siquiera un guion apto en estructura se publica sin revisión
+  humana de continuidad, desenlace, originalidad y lectura con voz.
+- Se preserva la separación entre Barriga IA y Barriga Studio; la
+  actualización vive en una rama de pruebas, no en \`main\`.
