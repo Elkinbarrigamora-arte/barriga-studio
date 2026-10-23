@@ -140,6 +140,59 @@ class PruebasPorBloques(unittest.TestCase):
             self.assertEqual(destino.read_text(encoding="utf-8"),
                              "conservar este resultado")
 
+    def test_gancho_manual_permite_continuar_sin_modelo_para_gancho(self):
+        respuestas = iter([HISTORIA_CORTA, CIERRE_CORTO])
+        llamadas = []
+        def simular(prompt, modelo):
+            llamadas.append(prompt)
+            return next(respuestas)
+        res = ensamblar_por_bloques(original(), generador=simular,
+                                    gancho_aprobado=GANCHO_CORTO)
+        self.assertEqual(len(llamadas), 2)
+        self.assertTrue(res["evaluacion"]["apto_para_revision_humana"])
+        self.assertEqual(res["guion"]["gancho"], GANCHO_CORTO)
+        self.assertEqual(res["historial_bloques"][0]["origen"],
+                         "APROBADO_MANUALMENTE")
+        self.assertEqual(len(res["historial_bloques"]), 3)
+
+    def test_gancho_manual_invalido_no_dispara_generaciones(self):
+        for gancho in ("Hola", " " * 4,
+                       "Un gancho tan largo que definitivamente ya no cabe "
+                       "dentro del tiempo previsto para el inicio de un reel"):
+            with self.subTest(gancho=gancho):
+                with self.assertRaises(ErrorNarrativa):
+                    ensamblar_por_bloques(original(), gancho_aprobado=gancho)
+
+    def test_gancho_usar_contexto_reducido_y_un_solo_campo(self):
+        req = prompt_para_bloque(
+            "gancho", original(), {}, limites_de_bloques(35))
+        self.assertIn("ENTRE 5 Y 8 PALABRAS", req)
+        self.assertIn('"texto"', req)
+        self.assertNotIn("borrador_de_desarrollo", req)
+        self.assertLess(len(req), 1100)
+
+    def test_presupuesto_de_tokens_en_ollama_local(self):
+        class Respuesta:
+            def __enter__(self):
+                return self
+            def __exit__(self, *args):
+                return False
+            def read(self):
+                return json.dumps({
+                    "response": json.dumps({"texto": GANCHO_CORTO})
+                }).encode("utf-8")
+        def resolver(request, timeout):
+            self.assertEqual(request.full_url,
+                             "http://127.0.0.1:11434/api/generate")
+            datos = json.loads(request.data)
+            self.assertEqual(datos["options"]["num_predict"], 75)
+            self.assertEqual(datos["options"]["temperature"], 0.2)
+            return Respuesta()
+        with patch("barriga_ia_por_bloques.urlopen", side_effect=resolver):
+            self.assertEqual(
+                generar_texto_local("gancho corto", num_predict=75),
+                GANCHO_CORTO)
+
     def test_error_de_ollama_no_se_convierte_en_exito(self):
         def fallar(prompt, modelo):
             raise ErrorNarrativa("Ollama detenido")
