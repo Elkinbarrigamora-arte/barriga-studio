@@ -14,6 +14,8 @@ import shutil
 import subprocess
 import sys
 from urllib.request import Request, urlopen
+from urllib.error import HTTPError
+import time
 
 MODEL = 'qwen2.5-coder:14b'
 OLLAMA = 'http://127.0.0.1:11434/api/generate'
@@ -94,7 +96,10 @@ def ask_model(task, current, model):
         '"contenido":"código JavaScript completo"}. '
         'Si quieres añadir una funcionalidad extensa, CREA un archivo JS nuevo y '
         'enlázalo desde index.html mediante un parche exacto en </body>. '
-        'Nunca dupliques rutas en la lista cambios. Hasta TRES cambios por iteración. '
+        'Puedes incluir varios buscar/reemplazar sobre UNA MISMA RUTA existente; '
+        'se aplicarán EN ORDEN y cada buscar debe coincidir exactamente una vez '
+        'en el resultado del cambio anterior. Nunca dupliques contenido para un archivo nuevo. '
+        'Hasta TRES cambios por iteración. '
         'No inventes servicios de video, sincronización, voces ni funcionalidades no conectadas. '
         'Solo edita index.html, assets/, docs/ o tests/. '
         'NO propongas cambios de tools/puente_local.py ni de otros archivos tools/. '
@@ -112,14 +117,31 @@ def ask_model(task, current, model):
               '\n\nRECUERDA: antes de escribir JSON, distingue archivos EXISTENTES (buscar/reemplazar) '
               'de archivos NUEVOS (contenido). No uses contenido para assets/escenas.js.')
     payload = {'model': model, 'prompt': prompt, 'format': 'json', 'stream': False,
-               'options': {'temperature': 0.2, 'num_ctx': 16384, 'num_predict': 5000}}
+               'options': {'temperature': 0.2, 'num_ctx': 12288, 'num_predict': 3500}}
     request = Request(OLLAMA, data=json.dumps(payload).encode('utf-8'),
                       headers={'Content-Type': 'application/json'}, method='POST')
+    raw = None
+    for attempt in range(1, 4):
+        try:
+            with urlopen(request, timeout=360) as answer:
+                raw = json.load(answer).get('response', '')
+            break
+        except HTTPError as exc:
+            detail = exc.read(500).decode('utf-8', 'replace').strip()
+            if exc.code not in (500, 502, 503, 504) or attempt == 3:
+                raise RuntimeError('Ollama HTTP ' + str(exc.code) + ': ' + detail[:350]) from exc
+            print('Ollama HTTP ' + str(exc.code) +
+                  ': reintento controlado ' + str(attempt) + '/3', flush=True)
+            time.sleep(attempt * 2)
+        except (OSError, TimeoutError) as exc:
+            if attempt == 3:
+                raise RuntimeError('Ollama no disponible tras tres intentos: ' + str(exc)) from exc
+            print('Ollama desconectado: reintento controlado ' +
+                  str(attempt) + '/3', flush=True)
+            time.sleep(attempt * 2)
     try:
-        with urlopen(request, timeout=360) as answer:
-            raw = json.load(answer).get('response', '')
         result = json.loads(raw)
-    except (OSError, ValueError, TypeError) as exc:
+    except (ValueError, TypeError) as exc:
         raise RuntimeError('Ollama no devolvió cambios JSON válidos: ' + str(exc)) from exc
     if not isinstance(result, dict) or not isinstance(result.get('cambios'), list):
         raise ValueError('Falta el arreglo cambios')
@@ -129,19 +151,17 @@ def ask_model(task, current, model):
 
 
 def plan_changes(root, changes):
-    planned, seen = {}, set()
+    planned = {}
     for change in changes:
         if not isinstance(change, dict):
             raise ValueError('Cambio sin formato válido')
         rel = change.get('ruta')
         target = guard_path(root, rel)
-        if rel in seen:
-            raise ValueError('Archivo repetido: ' + rel)
-        seen.add(rel)
         if target.exists():
             if 'contenido' in change:
                 raise ValueError('Para archivo existente usa buscar/reemplazar: ' + rel)
-            old = target.read_text(encoding='utf-8')
+            # Parches sobre una misma ruta se aplican secuencialmente sin borrar cambios previos.
+            old = planned[rel] if rel in planned else target.read_text(encoding='utf-8')
             find, replace = change.get('buscar'), change.get('reemplazar')
             if not isinstance(find, str) or not find or not isinstance(replace, str):
                 raise ValueError('Parche de texto inválido: ' + rel)
@@ -149,6 +169,8 @@ def plan_changes(root, changes):
                 raise ValueError('El parche no coincide exactamente una vez: ' + rel)
             new = old.replace(find, replace, 1)
         else:
+            if rel in planned:
+                raise ValueError('Archivo nuevo repetido: ' + rel)
             if 'buscar' in change or not isinstance(change.get('contenido'), str):
                 raise ValueError('Para archivo nuevo usa contenido: ' + rel)
             new = change['contenido']
@@ -240,7 +262,10 @@ def run_stage(root, name, goal, model):
                 raise RuntimeError('Cinco propuestas no aplicables; no se editó ningún archivo: ' + str(exc)) from exc
             print('Parche rechazado (' + str(attempt) + '/' + str(max_attempts) + '): ' + str(exc) + '. Reintentando...', flush=True)
             message = str(exc)
-            if message.startswith('Para archivo existente usa buscar/reemplazar: '):
+            if message.startswith('Archivo nuevo repetido: '):
+                advice = ('No crees dos veces un mismo archivo. Envía una única entrada contenido '
+                          'para esa ruta y usa las otras entradas para otros archivos.')
+            elif message.startswith('Para archivo existente usa buscar/reemplazar: '):
                 rejected_path = message.split(': ', 1)[1]
                 advice = ('La ruta ' + rejected_path + ' YA EXISTE. Está PROHIBIDO devolver contenido '
                           'para ella. Usa buscar/reemplazar exactos o crea un JS NUEVO '
