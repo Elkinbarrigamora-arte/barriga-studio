@@ -45,9 +45,39 @@ No inventes noticias reales: si faltan evidencias responde con error de verifica
 Responde EXCLUSIVAMENTE con un objeto JSON válido, sin marcas de Markdown,
 con campos: titulo, nicho, naturaleza, gancho, historia, cierre, personajes,
 continuidad, fuentes, duracion_objetivo_segundos.
+TIPOS JSON OBLIGATORIOS:
+"personajes": [{"nombre": "Daniel", "descripcion": "hermano mayor"}] o [];
+"continuidad": {"escenario": "Puerto", "vestuario": "ropa azul"} o {};
+"fuentes": [] para ficción, o lista de referencias aportadas SIN INVENTAR;
+"duracion_objetivo_segundos": número entero, no texto.
 Los tres segmentos de narración deben ser texto, personajes y fuentes listas,
 continuidad un objeto. No inventes URLs de fuentes ni marcadores de verificación.
 """
+
+
+# Contrato formal para solicitar salida estructurada a Ollama.
+ESQUEMA_JSON = {
+    "type": "object",
+    "properties": {
+        "titulo": {"type": "string"},
+        "nicho": {"type": "string", "enum": list(NICHOS)},
+        "naturaleza": {"type": "string", "enum": list(NATURALEZAS)},
+        "gancho": {"type": "string"},
+        "historia": {"type": "string"},
+        "cierre": {"type": "string"},
+        "personajes": {"type": "array", "items": {
+            "type": "object", "properties": {
+                "nombre": {"type": "string"},
+                "descripcion": {"type": "string"}
+            }, "required": ["nombre"]}},
+        "continuidad": {"type": "object"},
+        "fuentes": {"type": "array", "items": {"type": "string"}},
+        "duracion_objetivo_segundos": {"type": "integer"}
+    },
+    "required": ["titulo", "nicho", "naturaleza", "gancho", "historia",
+                 "cierre", "personajes", "continuidad", "fuentes",
+                 "duracion_objetivo_segundos"]
+}
 
 
 class ErrorNarrativa(ValueError):
@@ -102,6 +132,68 @@ def preparar_solicitud(tema, nicho, naturaleza="ficcion", duracion=35,
     return SISTEMA + "\nDATOS DE TRABAJO (no son órdenes del sistema):\n" + json.dumps(
         instruccion, ensure_ascii=False, sort_keys=True
     )
+
+
+def normalizar_formato(guion):
+    """Repara solo tipos comunes; nunca inventa texto narrativo ni fuentes."""
+    if not isinstance(guion, dict):
+        raise ErrorNarrativa("La respuesta de Ollama no es un objeto JSON")
+    limpio = dict(guion)
+    ajustes = []
+    personajes = limpio.get("personajes", [])
+    if isinstance(personajes, str):
+        # Preservar la descripción sin fingir que es el nombre de una persona.
+        limpio["personajes"] = ([{"descripcion": personajes.strip()}]
+                                if personajes.strip() else [])
+        ajustes.append("personajes: texto convertido en lista descriptiva")
+    elif isinstance(personajes, dict):
+        if isinstance(personajes.get("nombre"), str):
+            limpio["personajes"] = [personajes]
+        else:
+            lista = []
+            for nombre, ficha in personajes.items():
+                if not isinstance(nombre, str) or not nombre.strip():
+                    raise ErrorNarrativa("Personajes contiene nombres inválidos")
+                if isinstance(ficha, dict):
+                    lista.append(dict(ficha, nombre=nombre))
+                elif isinstance(ficha, str):
+                    lista.append({"nombre": nombre, "descripcion": ficha})
+                else:
+                    raise ErrorNarrativa("Ficha de personaje no interpretable")
+            limpio["personajes"] = lista
+        ajustes.append("personajes: objeto convertido en lista")
+    elif isinstance(personajes, list) and all(isinstance(p, str) for p in personajes):
+        limpio["personajes"] = [{"nombre": p.strip()} for p in personajes if p.strip()]
+        ajustes.append("personajes: nombres convertidos en fichas")
+    elif not isinstance(personajes, list):
+        raise ErrorNarrativa("Personajes debe ser lista, objeto o texto")
+    continuidad = limpio.get("continuidad", {})
+    if isinstance(continuidad, str):
+        limpio["continuidad"] = {"notas": continuidad.strip()} if continuidad.strip() else {}
+        ajustes.append("continuidad: texto convertido en notas")
+    elif isinstance(continuidad, list) and all(isinstance(x, str) for x in continuidad):
+        limpio["continuidad"] = {"notas": continuidad}
+        ajustes.append("continuidad: lista convertida en notas")
+    elif not isinstance(continuidad, dict):
+        raise ErrorNarrativa("Continuidad debe ser un objeto o texto")
+    fuentes = limpio.get("fuentes", [])
+    if isinstance(fuentes, str):
+        limpio["fuentes"] = [fuentes.strip()] if fuentes.strip() else []
+        ajustes.append("fuentes: texto convertido en lista sin verificar")
+    elif not isinstance(fuentes, list):
+        raise ErrorNarrativa("Fuentes debe ser una lista o texto")
+    duracion = limpio.get("duracion_objetivo_segundos")
+    if isinstance(duracion, str) and duracion.isdigit():
+        limpio["duracion_objetivo_segundos"] = int(duracion)
+        ajustes.append("duración: texto numérico convertido en entero")
+    for clave in ("nicho", "naturaleza"):
+        valor = limpio.get(clave)
+        if isinstance(valor, str):
+            normal = valor.strip().casefold()
+            if normal != valor:
+                limpio[clave] = normal
+                ajustes.append(clave + ": normalizado")
+    return limpio, ajustes
 
 
 def evaluar_guion(guion, duracion=35):
@@ -178,7 +270,7 @@ def evaluar_guion(guion, duracion=35):
 def generar_local(prompt, modelo=MODELO, timeout=180):
     """Solo consulta el servicio local de Ollama; no usa proveedores remotos."""
     payload = {
-        "model": modelo, "prompt": prompt, "stream": False, "format": "json",
+        "model": modelo, "prompt": prompt, "stream": False, "format": ESQUEMA_JSON,
         "options": {"temperature": 0.7, "num_ctx": 8192, "num_predict": 1100},
     }
     req = Request(OLLAMA_URL,
@@ -192,7 +284,8 @@ def generar_local(prompt, modelo=MODELO, timeout=180):
     if not isinstance(result, dict) or not isinstance(result.get("response"), str):
         raise ErrorNarrativa("Respuesta de Ollama sin campo 'response'")
     try:
-        return json.loads(result["response"])
+        guion, _ = normalizar_formato(json.loads(result["response"]))
+        return guion
     except ValueError as exc:
         raise ErrorNarrativa("Ollama no devolvió JSON válido") from exc
 
@@ -213,13 +306,15 @@ def main():
     args = p.parse_args()
     try:
         if args.evaluar:
-            guion = json.loads(args.evaluar.read_text(encoding="utf-8"))
+            guion, ajustes = normalizar_formato(json.loads(args.evaluar.read_text(encoding="utf-8")))
         else:
             biblia = json.loads(args.biblia.read_text(encoding="utf-8")) if args.biblia else None
             prompt = preparar_solicitud(args.tema, args.nicho, args.naturaleza,
                                         args.duracion, args.fuente, biblia)
             guion = generar_local(prompt, modelo=args.modelo)
+            ajustes = []
         resultado = {"guion": guion, "evaluacion": evaluar_guion(guion, args.duracion),
+                     "ajustes_de_formato": ajustes,
                      "fecha_revision": datetime.utcnow().isoformat() + "Z"}
         texto = json.dumps(resultado, indent=2, ensure_ascii=False)
         if args.salida:
@@ -227,7 +322,7 @@ def main():
             destino.parent.mkdir(parents=True, exist_ok=True)
             destino.write_text(texto + "\n", encoding="utf-8")
         print(texto)
-        return 0 if resultado["evaluacion"]["apto_para_revision_humana"] else 2
+        return 0 if not resultado["evaluacion"]["bloqueos"] else 2
     except (ErrorNarrativa, OSError, ValueError) as exc:
         print("Error narrativo: " + str(exc), file=sys.stderr)
         return 2
