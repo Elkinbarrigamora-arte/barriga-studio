@@ -105,6 +105,28 @@ class AgenteDesarrolloTests(unittest.TestCase):
                             self.git('branch', '--list').replace('* ', '').splitlines()))
 
     @unittest.skipUnless(__import__('shutil').which('node'), 'Node.js necesario para validar JS')
+    def test_retries_invalid_js_then_commits_valid_patch(self):
+        bad = {'cambios': [
+            {'ruta': 'assets/proyectos-core.js', 'contenido': 'const x = `<div class='},
+            {'ruta': 'index.html', 'buscar': '</body>',
+             'reemplazar': '<script src="assets/proyectos-core.js"></script></body>'}
+        ]}
+        good = {'cambios': [
+            {'ruta': 'assets/proyectos-core.js', 'contenido': 'window.BarrigaProyectos = {};'},
+            {'ruta': 'index.html', 'buscar': '</body>',
+             'reemplazar': '<script src="assets/proyectos-core.js"></script></body>'}
+        ]}
+        with patch.object(agent, 'ask_model', side_effect=[bad, good]) as mocked:
+            self.assertTrue(agent.run_stage(self.root, '03_proyectos',
+                                            'guardar proyectos', 'modelo-local'))
+        self.assertEqual(mocked.call_count, 2)
+        self.assertEqual(self.git('status', '--porcelain'), '')
+        self.assertEqual(self.git('log', '-1', '--format=%s'),
+                         'Barriga IA: 03_proyectos')
+        self.assertEqual((self.root / 'assets/proyectos-core.js').read_text(),
+                         'window.BarrigaProyectos = {};')
+
+    @unittest.skipUnless(__import__('shutil').which('node'), 'Node.js necesario para validar JS')
     def test_failed_js_does_not_modify_existing_files(self):
         before = (self.root / 'index.html').read_text(encoding='utf-8')
         output = {'cambios': [
