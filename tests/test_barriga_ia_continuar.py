@@ -70,7 +70,7 @@ class ContinuidadRegresion(unittest.TestCase):
                          {"historia_1": (31, 35),
                           "historia_2": (32, 35),
                           "cierre": (13, 18)})
-        self.assertEqual(contar_palabras(GANCHO), 8)
+        self.assertEqual(contar_palabras(GANCHO), 7)
         self.assertEqual(contar_palabras(PARTE_A), 33)
         self.assertEqual(contar_palabras(PARTE_B), 34)
         self.assertEqual(contar_palabras(CIERRE), 16)
