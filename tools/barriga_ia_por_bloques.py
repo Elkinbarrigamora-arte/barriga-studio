@@ -97,15 +97,14 @@ def prompt_para_bloque(nombre, original, generado, limites, anterior=None):
             "palabras": anterior["palabras"],
             "motivo": "No cumple el mínimo y máximo del bloque",
         }
-    return (
+    instruccion = (
         "ESCRIBE SOLO LA SECCION '{}' DE UNA HISTORIA PARA REEL. "
         "Debe contener ENTRE {} Y {} PALABRAS, ambas inclusive. "
         "Si escribes más palabras, la sección se descartará. "
         "Devuelve exclusivamente un JSON del tipo {{\"texto\": \"...\"}}. "
-        "No devuelvas título, personajes, explicación ni ninguna otra sección.\n"
-        .format(nombre.upper(), minimo, maximo)
-        + json.dumps(payload, ensure_ascii=False, sort_keys=True)
-    )
+        "No devuelvas título, personajes, explicación ni ninguna otra sección.\\n"
+    ).format(nombre.upper(), minimo, maximo)
+    return instruccion + json.dumps(payload, ensure_ascii=False, sort_keys=True)
 
 
 def generar_texto_local(prompt, modelo=MODELO, timeout=150):
