@@ -98,7 +98,7 @@ def ask_model(task, current, model):
     )
     prompt = system + '\n\nOBJETIVO DE ESTA ITERACIÓN: ' + task + '\n\nCÓDIGO ACTUAL:\n' + current
     payload = {'model': model, 'prompt': prompt, 'format': 'json', 'stream': False,
-               'options': {'temperature': 0.2, 'num_predict': 5000}}
+               'options': {'temperature': 0.2, 'num_ctx': 16384, 'num_predict': 5000}}
     request = Request(OLLAMA, data=json.dumps(payload).encode('utf-8'),
                       headers={'Content-Type': 'application/json'}, method='POST')
     try:
