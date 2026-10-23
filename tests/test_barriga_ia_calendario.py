@@ -82,9 +82,11 @@ class CalendarioIATest(unittest.TestCase):
         self.assertEqual(self.ia.exportar_csv(path), 60)
         rows = path.read_text(encoding="utf-8").splitlines()
         self.assertEqual(len(rows), 61)
-        self.assertIn("PENDIENTE_CARGA_EXTERNA", path.read_text(encoding="utf-8")
-                      if self.ia.resumen()["turnos_con_video"] else
-                      "PENDIENTE_CARGA_EXTERNA")
+        self.assertIn("SIN_VIDEO", path.read_text(encoding="utf-8"))
+        self.ia.ingresar(self.manifiesto(1))
+        self.ia.asignar("clip_1", "2026-10-24", "17:30")
+        self.ia.exportar_csv(path)
+        self.assertIn("PENDIENTE_CARGA_EXTERNA", path.read_text(encoding="utf-8"))
         self.assertFalse(self.ia.resumen()["publicacion_automatica"])
         self.assertFalse(self.ia.resumen()["conectores_sociales"])
 
