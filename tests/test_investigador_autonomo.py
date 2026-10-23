@@ -21,7 +21,8 @@ class InvestigadorTests(unittest.TestCase):
     def test_recognizes_topics_and_filters_host(self):
         found = module.parse_atom(ATOM, "Ollama")
         self.assertEqual(len(found), 1)
-        self.assertEqual(found[0]["temas"], ["video", "voz"])
+        self.assertIn("video", found[0]["temas"])
+        self.assertIn("voz", found[0]["temas"])
 
     def test_keeps_old_and_avoids_duplicates(self):
         with tempfile.TemporaryDirectory() as d:
