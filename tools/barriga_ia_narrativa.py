@@ -511,6 +511,8 @@ def main():
             }
         else:
             if args.revisar_archivo:
+                if args.salida and args.revisar_archivo.resolve() == args.salida.resolve():
+                    raise ErrorNarrativa("El archivo de salida debe ser distinto al original")
                 guion = leer_guion_guardado(args.revisar_archivo)
                 if guion.get("nicho") != args.nicho or guion.get("naturaleza") != args.naturaleza:
                     raise ErrorNarrativa(
@@ -525,9 +527,6 @@ def main():
             resultado = revisar_borrador_local(
                 guion, duracion=args.duracion, modelo=args.modelo,
                 max_revisiones=args.max_revisiones, premisa=premisa)
-            if args.revisar_archivo and args.salida:
-                if args.revisar_archivo.resolve() == args.salida.resolve():
-                    raise ErrorNarrativa("El archivo de salida debe ser distinto al original")
         resultado["fecha_revision"] = datetime.utcnow().isoformat() + "Z"
         texto = json.dumps(resultado, indent=2, ensure_ascii=False)
         if args.salida:
