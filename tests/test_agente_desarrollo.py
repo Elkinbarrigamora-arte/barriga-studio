@@ -1,5 +1,8 @@
 """Pruebas del coordinador local; no requiere ejecutar un modelo ni conectarse a Internet."""
 from pathlib import Path
+from io import BytesIO
+import json
+from urllib.error import HTTPError
 import subprocess
 import sys
 import tempfile
@@ -71,6 +74,22 @@ class AgenteDesarrolloTests(unittest.TestCase):
         ]
         planned = agent.plan_changes(self.root, changes)
         self.assertIn('</main></footer></body>', planned['index.html'])
+
+    def test_ollama_http_500_retries_before_succeeding(self):
+        first_error = HTTPError('http://127.0.0.1:11434/api/generate',
+                                500, 'Internal Server Error', {}, BytesIO(b'overloaded'))
+        model_response = {'response': json.dumps({
+            'resumen': 'ok',
+            'cambios': [{'ruta': 'assets/nuevo.js', 'contenido': 'console.log(1);'}]
+        })}
+        successful_response = BytesIO(json.dumps(model_response).encode('utf-8'))
+        with patch.object(agent, 'urlopen',
+                          side_effect=[first_error, successful_response]) as mocked, \
+             patch.object(agent.time, 'sleep') as waiting:
+            result = agent.ask_model('crear modulo', 'ARCHIVO index.html', 'modelo-local')
+        self.assertEqual(result['resumen'], 'ok')
+        self.assertEqual(mocked.call_count, 2)
+        waiting.assert_called_once_with(2)
 
     @unittest.skipUnless(__import__('shutil').which('node'), 'Node.js necesario para validar JS')
     def test_success_creates_backup_and_commit(self):
