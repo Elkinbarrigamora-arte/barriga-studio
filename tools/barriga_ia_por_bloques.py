@@ -9,6 +9,7 @@ Compatible con Python 3.9 o posterior.
 import argparse
 from datetime import datetime
 import json
+import re
 from pathlib import Path
 import sys
 from urllib.error import URLError
@@ -38,6 +39,48 @@ def limites_de_bloques(duracion):
         "historia": (max(12, historia - 2), historia + 5),
         "cierre": (max(10, cierre - 3), cierre + 2),
     }
+
+
+def detectar_problemas_editoriales(texto, original, bloque, anterior=None):
+    """Controles conservadores: repetición, nombres no aportados y giro temporal.
+
+    No son una verificación semántica de calidad; solo bloquean indicios claros.
+    """
+    problemas = []
+    if anterior and isinstance(anterior.get("texto"), str):
+        a = " ".join(anterior["texto"].casefold().split()).strip(" .!¿?¡")
+        b = " ".join(texto.casefold().split()).strip(" .!¿?¡")
+        if a and a == b:
+            problemas.append("Respuesta repetida literalmente tras un rechazo")
+    original_texto = " ".join(
+        str(original.get(campo, "")) for campo in
+        ("titulo", "gancho", "historia", "cierre")
+    )
+    for ficha in original.get("personajes", []):
+        if isinstance(ficha, dict):
+            original_texto += " " + str(ficha.get("nombre", ""))
+    # Solo flaggear mayúsculas interiores, no arranques normales de oración.
+    for coincide in re.finditer(r"\b[A-ZÁÉÍÓÚÑ][a-záéíóúñ]{2,}\b", texto):
+        posicion = coincide.start()
+        antes = texto[:posicion].rstrip()
+        if not antes or antes[-1] in ".!?¡¿:;":
+            continue
+        nombre = coincide.group()
+        if not re.search(
+            r"(?<!\w)" + re.escape(nombre) + r"(?!\w)",
+            original_texto, flags=re.IGNORECASE | re.UNICODE
+        ):
+            problemas.append("Posible personaje o nombre nuevo: " + nombre)
+    if bloque == "gancho":
+        origen = (str(original.get("gancho", "")) + " " +
+                  str(original.get("historia", ""))[:350]).casefold()
+        if re.search(r"\bayer\b", origen) and not re.search(
+            r"\bayer\b|\banoche\b|\bd[ií]a anterior\b|"
+            r"\bnoche anterior\b|\bv[ií]spera\b", texto.casefold()
+        ):
+            problemas.append("Se perdió la pista temporal esencial: ayer")
+    # Mantener únicos los avisos.
+    return list(dict.fromkeys(problemas))
 
 
 def prompt_para_bloque(nombre, original, generado, limites, anterior=None):
@@ -97,24 +140,43 @@ def prompt_para_bloque(nombre, original, generado, limites, anterior=None):
         payload["intento_anterior_rechazado"] = {
             "texto": anterior["texto"][:120],
             "palabras": anterior["palabras"],
-            "motivo": "No cumple el mínimo y máximo del bloque",
+            "motivos": anterior.get("motivos_rechazo", []),
         }
     if nombre == "gancho":
         # Prompt compacto y ejemplo de LONGITUD, no de hechos de la historia.
         ej = '{"texto": "¡La carta de ayer reveló algo imposible!"}'
         contexto_corto = json.dumps({
-            "titulo": original.get("titulo", ""),
             "gancho_original": original.get("gancho", "")[:180],
-            "anterior_rechazado": (
-                {"palabras": anterior["palabras"],
-                 "texto": anterior["texto"][:90]} if anterior else None),
+            "personajes_permitidos": [
+                x.get("nombre", "") for x in original.get("personajes", [])
+                if isinstance(x, dict)
+            ],
         }, ensure_ascii=False)
+        if anterior:
+            # No solicitar el mismo resultado determinista: variar objetivo y
+            # prohibir explicitamente repetir la respuesta o inventar nombres.
+            return (
+                "EDICION DE TITULAR, SEGUNDO INTENTO. El intento anterior fue "
+                "RECHAZADO. No lo repitas ni menciones personas nuevas. "
+                "Corrige y REEMPLAZA la frase previa con un titular distinto. "
+                "ENTRE 5 Y 8 PALABRAS; preservar el misterio central. "
+                "Si el guion dice AYER, incluye AYER. "
+                "Nombres propios SOLO si estan permitidos en el contexto. "
+                "Unicamente JSON con la clave texto. "
+                "Motivos del rechazo: "
+                + json.dumps(anterior.get("motivos_rechazo", []),
+                             ensure_ascii=False)
+                + " Frase rechazada: " + json.dumps(
+                    anterior.get("texto", "")[:95], ensure_ascii=False)
+                + " Contexto: " + contexto_corto
+            )
         return (
-            "Eres un editor de titulares de suspenso. Escribe UNA sola oración "
-            "original sobre la premisa indicada, ENTRE 5 Y 8 PALABRAS. "
-            "Ejemplo de LONGITUD (no copies su contenido): " + ej + ". "
-            "Prohibido incluir historia, explicación, moraleja o más de una oración. "
-            "Solo JSON con un campo texto. Premisa: " + contexto_corto
+            "Eres editor de ganchos de suspenso. Entrega UNA frase diferente "
+            "del contexto, ENTRE 5 Y 8 PALABRAS. No inventes nombres ni "
+            "lugares. Conserva la intriga temporal si menciona AYER. "
+            "No escribas la historia o el cierre. "
+            "Ejemplo de estructura (no copies): " + ej + ". "
+            "Solo JSON con el campo texto. Contexto: " + contexto_corto
         )
     instruccion = (
         "ESCRIBE SOLO LA SECCION '{}' DE UNA HISTORIA PARA REEL. "
@@ -126,7 +188,8 @@ def prompt_para_bloque(nombre, original, generado, limites, anterior=None):
     return instruccion + json.dumps(payload, ensure_ascii=False, sort_keys=True)
 
 
-def generar_texto_local(prompt, modelo=MODELO, timeout=150, num_predict=240):
+def generar_texto_local(prompt, modelo=MODELO, timeout=150,
+                         num_predict=240, temperatura=0.2):
     """Llamada únicamente a la instancia local de Ollama, sin APIs pagas."""
     datos = {
         "model": modelo,
@@ -134,7 +197,7 @@ def generar_texto_local(prompt, modelo=MODELO, timeout=150, num_predict=240):
         "format": ESQUEMA_TEXTO,
         "stream": False,
         "options": {
-            "temperature": 0.2,
+            "temperature": temperatura,
             "num_ctx": 4096,
             "num_predict": num_predict,
         },
@@ -218,12 +281,18 @@ def ensamblar_por_bloques(original, duracion=35, modelo=MODELO,
                     limite_tokens = {"gancho": 75, "historia": 230,
                                      "cierre": 115}[bloque]
                     texto = generador(
-                        prompt, modelo=modelo, num_predict=limite_tokens)
+                        prompt, modelo=modelo, num_predict=limite_tokens,
+                        temperatura=(0.2 if numero == 1 else 0.65))
                 else:
                     texto = generador(prompt, modelo=modelo)
                 palabras = contar_palabras(texto)
                 minimo, maximo = limites[bloque]
                 valido = minimo <= palabras <= maximo
+                motivos = [] if valido else [
+                    "Extensión {} palabras fuera de {} a {}".format(
+                        palabras, minimo, maximo)]
+                motivos += detectar_problemas_editoriales(
+                    texto, original, bloque, previo)
                 informe = {
                     "bloque": bloque,
                     "intento": numero,
@@ -231,16 +300,20 @@ def ensamblar_por_bloques(original, duracion=35, modelo=MODELO,
                     "palabras": palabras,
                     "limites": [minimo, maximo],
                     "longitud_valida": valido,
+                    "motivos_rechazo": motivos,
+                    "aceptable_para_ensamblaje": valido and not motivos,
                 }
             except (ErrorNarrativa, ValueError, OSError) as exc:
                 informe = {
                     "bloque": bloque, "intento": numero, "texto": "",
                     "palabras": 0, "limites": list(limites[bloque]),
                     "longitud_valida": False, "error": str(exc),
+                    "motivos_rechazo": ["Error local: " + str(exc)],
+                    "aceptable_para_ensamblaje": False,
                 }
             resultado["historial_bloques"].append(informe)
             previo = informe
-            if informe["longitud_valida"]:
+            if informe["aceptable_para_ensamblaje"]:
                 aprobados[bloque] = informe["texto"]
                 resultado["bloques_aprobados_en_longitud"][bloque] = informe["palabras"]
                 exitoso = True
@@ -248,8 +321,8 @@ def ensamblar_por_bloques(original, duracion=35, modelo=MODELO,
         if not exitoso:
             resultado["estado"] = "BLOQUE_RECHAZADO_" + bloque.upper()
             resultado["incidencia"] = (
-                "Ollama no logró {} entre {} y {} palabras en {} intentos".format(
-                    bloque, *limites[bloque], max_intentos))
+                "El bloque {} no cumplió longitud o coherencia básica "
+                "en {} intentos".format(bloque, max_intentos))
             return resultado
 
     nuevo = dict(original)
