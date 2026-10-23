@@ -111,7 +111,7 @@ def prompt_para_bloque(nombre, original, generado, limites, anterior=None):
         }, ensure_ascii=False)
         return (
             "Eres un editor de titulares de suspenso. Escribe UNA sola oración "
-            "original sobre la premisa indicada, de 5 a 8 palabras. "
+            "original sobre la premisa indicada, ENTRE 5 Y 8 PALABRAS. "
             "Ejemplo de LONGITUD (no copies su contenido): " + ej + ". "
             "Prohibido incluir historia, explicación, moraleja o más de una oración. "
             "Solo JSON con un campo texto. Premisa: " + contexto_corto
