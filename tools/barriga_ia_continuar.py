@@ -36,9 +36,16 @@ def recuperar_gancho(path):
         and item.get("aceptable_para_ensamblaje") is True
         and isinstance(item.get("texto"), str)
     ]
-    if not candidatos:
-        raise ErrorNarrativa("No hay un gancho validado recuperable en este archivo")
-    gancho = candidatos[-1]["texto"].strip()
+    if candidatos:
+        gancho = candidatos[-1]["texto"].strip()
+    else:
+        # Los informes V0.7 de continuación guardan el gancho aprobado
+        # en bloques_conservados, no en historial_bloques.
+        conservados = data.get("bloques_conservados", {})
+        gancho = conservados.get("gancho") if isinstance(conservados, dict) else None
+        if not isinstance(gancho, str) or not gancho.strip():
+            raise ErrorNarrativa("No hay un gancho validado recuperable en este archivo")
+        gancho = gancho.strip()
     a, b = limites_de_bloques(35)["gancho"]
     if not a <= contar_palabras(gancho) <= b:
         raise ErrorNarrativa("El gancho recuperado no cumple el rango 5 a 8")
