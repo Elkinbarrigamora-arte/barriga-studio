@@ -498,6 +498,8 @@ def main():
     p.add_argument("--modelo", default=MODELO)
     p.add_argument("--max-revisiones", type=int, default=2,
                    help="Máximo de reescrituras locales adicionales (0 a 2)")
+    p.add_argument("--resumen", action="store_true",
+                   help="Mostrar solo el diagnóstico; guardar el historial completo en JSON")
     p.add_argument("--salida", type=Path,
                    help="Guardar resultado local; NO guardar archivos privados en Git")
     args = p.parse_args()
@@ -533,7 +535,28 @@ def main():
             destino = args.salida
             destino.parent.mkdir(parents=True, exist_ok=True)
             destino.write_text(texto + "\n", encoding="utf-8")
-        print(texto)
+        if args.resumen:
+            evaluacion = resultado["evaluacion"]
+            historial = resultado.get("historial_intentos", [])
+            resumen = {
+                "titulo": resultado["guion"]["titulo"],
+                "palabras_primera_version": (
+                    historial[0]["evaluacion"]["palabras"] if historial else
+                    evaluacion["palabras"]),
+                "palabras_version_final": evaluacion["palabras"],
+                "segundos_estimados": evaluacion["segundos_estimados"],
+                "duracion_objetivo": evaluacion["duracion_objetivo"],
+                "intentos": resultado.get("intentos_realizados", 1),
+                "estado": evaluacion["estado_revision"],
+                "bloqueos": evaluacion["bloqueos"],
+                "advertencias": evaluacion["advertencias"],
+                "incidencia_reescritura": resultado.get("incidencia_reescritura"),
+                "salida_local": str(args.salida) if args.salida else None,
+                "publicacion_automatica_autorizada": False,
+            }
+            print(json.dumps(resumen, ensure_ascii=False, indent=2))
+        else:
+            print(texto)
         return 0 if resultado["evaluacion"]["apto_para_revision_humana"] else 2
     except (ErrorNarrativa, OSError, ValueError) as exc:
         print("Error narrativo: " + str(exc), file=sys.stderr)
