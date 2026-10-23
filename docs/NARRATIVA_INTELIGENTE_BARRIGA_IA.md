@@ -309,8 +309,8 @@ por ejemplo \`sexta-prueba.json\`. No volver a apuntar al quinto archivo:
 se trata de un resultado histórico.
 
 Si un gancho creado y **aprobado por una persona** debe utilizarse, se
-puede pasar \`--gancho-aprobado "¡La carta de ayer rompió treinta años!"\`
-(8 palabras) para saltar únicamente el bloque de gancho. Esta opción
+puede pasar \`--gancho-aprobado "¡Su hermano desapareció, pero escribió ayer!"\`
+(6 palabras) para saltar únicamente el bloque de gancho. Esta opción
 no resuelve por sí sola la autonomía completa del motor narrativo.
 
 La duración es aproximada: 150 palabras/minuto. La aprobación final
