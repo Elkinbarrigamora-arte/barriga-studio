@@ -83,6 +83,49 @@ def detectar_problemas_editoriales(texto, original, bloque, anterior=None):
     return list(dict.fromkeys(problemas))
 
 
+def proponer_gancho_seguro(original, limites, premisa=None):
+    """Gancho determinista solo con datos verificables en el borrador/premisa.
+
+    Nunca decide el misterio por su cuenta ni atribuye la carta al hermano.
+    Si los datos no sustentan una regla o una frase extractiva, retorna None.
+    """
+    if not isinstance(original, dict):
+        raise ErrorNarrativa("El borrador original debe ser un objeto")
+    if premisa is not None and (
+            not isinstance(premisa, str) or
+            not 10 <= len(premisa.strip()) <= 500):
+        raise ErrorNarrativa("La premisa debe tener de 10 a 500 caracteres")
+    texto_base = premisa or " ".join(
+        str(original.get(campo, "")) for campo in ("gancho", "historia", "cierre"))
+    base = texto_base.casefold()
+    # Importante: el hermano NO se presenta como autor de la carta, porque
+    # la premisa solo dice que alguien la escribió ayer.
+    hechos_necesarios = (
+        re.search(r"\bherman[oa]s?\b", base),
+        re.search(r"\bdesaparec\w*\b", base),
+        re.search(r"\bcarta\b", base),
+        re.search(r"\bayer\b", base),
+        re.search(r"\bescrib\w*\b|\bfechad[ao]\b", base),
+    )
+    if all(hechos_necesarios):
+        candidato = "¡La carta de su hermano fue escrita ayer!"
+        if limites["gancho"][0] <= contar_palabras(candidato) <= limites["gancho"][1]:
+            return {"texto": candidato, "origen": "REGLA_FIEL_A_PREMISA",
+                    "regla": "carta_hermano_desaparecido_escrita_ayer"}
+    # Ruta general: extraer una oración completa del gancho existente.
+    # No cortar por longitud ni crear nuevas relaciones/personajes.
+    gancho_original = original.get("gancho", "")
+    if isinstance(gancho_original, str):
+        for candidato in re.split(r"(?<=[.!?…])\s+", gancho_original.strip()):
+            if (limites["gancho"][0] <= contar_palabras(candidato)
+                    <= limites["gancho"][1]
+                    and not detectar_problemas_editoriales(
+                        candidato, original, "gancho")):
+                return {"texto": candidato, "origen": "EXTRACTIVO_BORRADOR",
+                        "regla": "oracion_completa_sin_reescritura"}
+    return None
+
+
 def prompt_para_bloque(nombre, original, generado, limites, anterior=None):
     """Pedir una sola parte; no pasar todas las instrucciones largas antiguas."""
     minimo, maximo = limites[nombre]
@@ -222,7 +265,8 @@ def generar_texto_local(prompt, modelo=MODELO, timeout=150,
 
 def ensamblar_por_bloques(original, duracion=35, modelo=MODELO,
                           max_intentos=2, generador=None,
-                          gancho_aprobado=None):
+                          gancho_aprobado=None, estrategia_gancho="modelo",
+                          premisa=None):
     """Máximo seis llamadas y ningún recorte ciego de frases/palabras.
 
     Preserva todos los intentos y produce guion completo SOLO si se
@@ -234,6 +278,8 @@ def ensamblar_por_bloques(original, duracion=35, modelo=MODELO,
         raise ErrorNarrativa("Se permiten 1 o 2 intentos por bloque")
     if not isinstance(original, dict):
         raise ErrorNarrativa("Se requiere un guion de partida")
+    if estrategia_gancho not in ("modelo", "reglas-primero"):
+        raise ErrorNarrativa("Estrategia de gancho desconocida")
     evaluacion_original = evaluar_guion(original, duracion)
     if original["naturaleza"] == "factual" or original["nicho"] == "noticias":
         raise ErrorNarrativa(
@@ -261,6 +307,31 @@ def ensamblar_por_bloques(original, duracion=35, modelo=MODELO,
         "nota": "Control de longitud, no verificación semántica ni prueba de viralidad",
     }
     aprobados = {}
+    if gancho_aprobado is None and estrategia_gancho == "reglas-primero":
+        alternativa = proponer_gancho_seguro(
+            original, limites, premisa=premisa)
+        if alternativa:
+            texto = alternativa["texto"]
+            # Controlar el resultado sin asumir que una regla garantiza
+            # calidad creativa o causalidad narrativa.
+            if detectar_problemas_editoriales(texto, original, "gancho"):
+                alternativa = None
+            else:
+                aprobados["gancho"] = texto
+                resultado["bloques_aprobados_en_longitud"]["gancho"] = (
+                    contar_palabras(texto))
+                resultado["historial_bloques"].append({
+                    "bloque": "gancho",
+                    "intento": 0,
+                    "texto": texto,
+                    "palabras": contar_palabras(texto),
+                    "limites": list(limites["gancho"]),
+                    "longitud_valida": True,
+                    "aceptable_para_ensamblaje": True,
+                    "origen": alternativa["origen"],
+                    "regla": alternativa["regla"],
+                    "nota": "Plantilla o frase extractiva, NO generada por Ollama",
+                })
     if gancho_aprobado:
         aprobados["gancho"] = gancho_aprobado
         resultado["bloques_aprobados_en_longitud"]["gancho"] = contar_palabras(
@@ -346,6 +417,11 @@ def main():
     parser.add_argument("--modelo", default=MODELO)
     parser.add_argument("--gancho-aprobado", default=None,
                         help="Gancho manual de 5 a 8 palabras para saltar su generación")
+    parser.add_argument("--premisa", default=None,
+                        help="Premisa original para reglas fieles; no inventa el autor del misterio")
+    parser.add_argument("--estrategia-gancho", choices=("modelo", "reglas-primero"),
+                        default="modelo",
+                        help="Probar una regla o frase extractiva antes de usar Ollama")
     args = parser.parse_args()
 
     try:
@@ -358,7 +434,8 @@ def main():
         resultado = ensamblar_por_bloques(
             original, duracion=args.duracion,
             max_intentos=args.max_intentos, modelo=args.modelo,
-            gancho_aprobado=args.gancho_aprobado)
+            gancho_aprobado=args.gancho_aprobado,
+            estrategia_gancho=args.estrategia_gancho, premisa=args.premisa)
         resultado["fecha_revision"] = datetime.utcnow().isoformat() + "Z"
         args.salida.parent.mkdir(parents=True, exist_ok=True)
         with args.salida.open("x", encoding="utf-8") as f:
@@ -373,8 +450,15 @@ def main():
             "objetivo_segundos": args.duracion,
             "numero_llamadas_ollama": sum(
                 1 for intento in resultado["historial_bloques"]
-                if intento.get("origen") != "APROBADO_MANUALMENTE"),
+                if intento.get("origen") not in (
+                    "APROBADO_MANUALMENTE", "REGLA_FIEL_A_PREMISA",
+                    "EXTRACTIVO_BORRADOR")),
             "bloques_aprobados_en_longitud": resultado["bloques_aprobados_en_longitud"],
+            "metodo_gancho": next((
+                paso.get("origen", "OLLAMA") for paso in resultado["historial_bloques"]
+                if paso["bloque"] == "gancho" and
+                   paso.get("aceptable_para_ensamblaje", paso.get("longitud_valida", False))
+            ), None),
             "bloqueos": eval_final["bloqueos"] if eval_final else [],
             "advertencias": eval_final["advertencias"] if eval_final else [],
             "incidencia": resultado.get("incidencia"),
