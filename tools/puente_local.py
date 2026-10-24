@@ -146,6 +146,8 @@ def servidor(studio, token, puerto, modelo, db):
             self.send_header("Content-Type", content_type)
             self.send_header("Cache-Control", "no-store")
             self.send_header("X-Content-Type-Options", "nosniff")
+            self.send_header("X-Frame-Options", "DENY")
+            self.send_header("Content-Security-Policy", "frame-ancestors 'none'")
             self.send_header("Content-Length", str(len(data)))
             self.end_headers()
             self.wfile.write(data)
@@ -205,12 +207,20 @@ def servidor(studio, token, puerto, modelo, db):
                 if not 1 <= size <= 8000:
                     return self.send(413, {"error": "Solicitud demasiado grande"})
                 args = json.loads(self.rfile.read(size))
+                if not isinstance(args, dict):
+                    return self.send(400, {"error": "La solicitud debe ser un objeto JSON"})
                 idea = args.get("idea", "")
                 if not isinstance(idea, str) or not 2 <= len(idea.strip()) <= 2400:
                     return self.send(400, {"error": "Escribe una idea entre 2 y 2400 caracteres"})
                 self.send(200, guion(idea.strip(), modelo, db))
-            except (ValueError, TypeError, ErrorNarrativa) as exc:
+            except ErrorNarrativa as exc:
+                # Si Ollama local falla, no confundirlo con un error del editor.
+                if any(x in str(exc).casefold() for x in (
+                        "ollama", "respuesta", "timeout", "inferir")):
+                    return self.send(502, {"error": "Motor Ollama local: " + str(exc)[:150]})
                 return self.send(400, {"error": str(exc)[:180]})
+            except (ValueError, TypeError) as exc:
+                return self.send(400, {"error": "Solicitud inválida: " + str(exc)[:120]})
             except (sqlite3.Error, OSError):
                 return self.send(500, {"error": "Error guardando la generación local"})
             except RuntimeError as exc:
