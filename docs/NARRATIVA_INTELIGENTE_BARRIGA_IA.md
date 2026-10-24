@@ -465,3 +465,54 @@ Las pruebas unitarias de esta ruta comprueban la falta de atribución
 inventada, fidelidad textual, conservación del borrador original y
 trazabilidad de cada bloque. Se prueban con respuestas simuladas, no
 con generación en la Mac: la validación real sigue pendiente.
+
+
+## Reparación de BLOQUE_RECHAZADO_HISTORIA — recuperación sexta prueba
+
+**Incidente real:** sexta prueba con gancho aprobado de 7 palabras;
+historia con salida extensa (~123 palabras), frase aparentemente truncada
+y respuesta literal repetida. La validación detectó el error; no hay
+guion completo aprobado hasta probar localmente una nueva versión.
+
+La nueva herramienta \`tools/barriga_ia_recuperar.py\`:
+- Lee el \`local-data/narrativa/sexta-prueba.json\` del usuario
+  **sin sobrescribirlo**.
+- Recupera \`guion_original\`, \`historial_bloques\` y gancho válido,
+  exige exactamente **7 palabras** para la recuperación solicitada.
+- Conserva todos los intentos anteriores, se niega a sustituir el gancho
+  y vuelve a generar únicamente la historia (63–70 palabras).
+- Incluye motivos de rechazo, penalización de repetición literal
+  normalizada, control de cierre de oración y alertas básicas de nombres
+  nuevos. En reintentos usa una estrategia de redacción alternativa.
+- Si llega a aprobar historia, intenta entonces un cierre de 13–18
+  palabras, ensamblando el mismo gancho original. No marca éxito si un
+  bloque falla; máximo 3 intentos nuevos por bloque.
+- Mantiene el registro completo en **un archivo nuevo** y bloquea
+  publicación automática en todo momento.
+- Estima duración con \`--velocidad-ppm\` configurable (100–220) y no
+  la confunde con una medición de audio real.
+- Los controles automáticos **no prueban** coherencia literaria,
+  continuidad semántica total, atractivo narrativo, gramática perfecta
+  ni duración de locución real: revisión humana indispensable.
+
+### Ejecución de aceptación EN LA MAC (Ollama local)
+
+~~~sh
+cd "$HOME/Barriga-IA-Pruebas"
+git fetch origin feature/barriga-ia-calendario-30-dias-20261023
+git switch --detach FETCH_HEAD
+python3 -m unittest discover -s tests -p 'test_barriga_ia_recuperar.py' -v
+python3 tools/barriga_ia_recuperar.py \
+  --recuperar local-data/narrativa/sexta-prueba.json \
+  --duracion 35 --velocidad-ppm 150 --max-intentos 3 \
+  --salida local-data/narrativa/septima-prueba.json
+~~~
+
+El archivo \`septima-prueba.json\` se crea sin reemplazar el original.
+Si ya existe, dar un nombre distinto. Si la generación falla,
+**no declara reparado** el motor: revisa \`historial_bloques\` y
+\`incidencia\` del nuevo archivo.
+
+Las pruebas automatizadas utilizan respuestas simuladas, no la instancia
+de Ollama del usuario. El guion auténtico validado y sus intentos solo
+pueden obtenerse ejecutando el comando anterior con acceso a esa Mac.
