@@ -123,6 +123,54 @@ class MotorUnificadoTest(unittest.TestCase):
         guion = borrador()
         self.assertEqual(auditar_fidelidad(idea, guion), [])
 
+    def test_fidelidad_acepta_20_anos_y_formas_equivalentes(self):
+        idea = ("Un hombre recibe una carta escrita ayer por su hermano "
+                "desaparecido hace veinte años. Al seguir las pistas, "
+                "descubre una verdad inesperada.")
+        relato = {
+            "gancho": "¡La carta de su hermano fue escrita ayer!",
+            "historia": (
+                "Juan encontró la carta que Mateo, su hermano desaparecido "
+                "hace 20 años, escribió ayer. Investigó el sello y recorrió "
+                "la ciudad hasta descubrir la habitación donde Mateo "
+                "había permanecido escondido. El hombre dejó una pista "
+                "grabada en la pared antes de abrir la puerta."),
+            "cierre": (
+                "Mateo le mostró las pruebas y explicó que su desaparición "
+                "había sido forzada para proteger a Juan."),
+        }
+        self.assertEqual(auditar_fidelidad(idea, relato), [])
+
+    def test_fidelidad_no_exige_20_si_se_escribio_veinte(self):
+        idea = ("Un hombre recibe una carta escrita ayer por su hermano "
+                "desaparecido hace 20 años.")
+        relato = {
+            "gancho": "¡La carta de su hermano fue escrita ayer!",
+            "historia": (
+                "Juan encontró una carta escrita ayer por Mateo, "
+                "su hermano desaparecido hace veinte años. "
+                "Al abrirla descubrió dónde podía encontrarlo."),
+            "cierre": (
+                "Juan encontró a Mateo tras la puerta y ambos "
+                "comprendieron cómo se había entregado la carta."),
+        }
+        self.assertEqual(auditar_fidelidad(idea, relato), [])
+
+    def test_fidelidad_sigue_rechazando_duracion_y_familiar_cambiados(self):
+        idea = ("Un hombre recibe una carta escrita ayer por su hermano "
+                "desaparecido hace veinte años.")
+        relato = {
+            "gancho": "¡La carta escrita ayer ocultaba un secreto!",
+            "historia": (
+                "Juan abrió la carta enviada por su hermano Mateo. "
+                "Su esposa Ana había desaparecido hace diez años "
+                "y Juan siguió las pistas hasta un edificio abandonado."),
+            "cierre": "Juan encontró a Ana esperando en la entrada.",
+        }
+        problemas = auditar_fidelidad(idea, relato)
+        self.assertTrue(any("20 anos" in x for x in problemas), problemas)
+        self.assertTrue(any("su hermano" in x for x in problemas), problemas)
+
     def test_regresion_intercambio_hermano_por_esposa(self):
         """La nueva carta se conserva, pero no se puede cambiar al desaparecido."""
         idea = ("Un hombre recibe una carta escrita ayer por su hermano "
