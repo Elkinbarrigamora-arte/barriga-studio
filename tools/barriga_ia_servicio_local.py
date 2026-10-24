@@ -18,6 +18,7 @@ from barriga_ia_narrativa import (
 )
 from barriga_ia_por_bloques import ensamblar_por_bloques
 from barriga_ia_fidelidad import auditar_fidelidad
+from barriga_ia_acelerador import medir_solicitud, resumen
 
 DEFAULT_DB = Path(__file__).resolve().parents[1] / "local-data" / "guiones-locales.sqlite3"
 
@@ -30,6 +31,14 @@ def validar_solicitud(idea, duracion):
 
 
 def ejecutar_motor(idea, modelo, duracion=35):
+    """Motor instrumentado: contabiliza llamadas y latencia por guion."""
+    with medir_solicitud() as llamadas:
+        resultado = _ejecutar_motor_impl(idea, modelo, duracion=duracion)
+    resultado["rendimiento"] = resumen(llamadas)
+    return resultado
+
+
+def _ejecutar_motor_impl(idea, modelo, duracion=35):
     """Generar, medir fidelidad, ensamblar y exigir revisión humana.
 
     Si se cambia la premisa, no ensambla ni marca el guion como apto.
@@ -92,7 +101,8 @@ def ejecutar_motor(idea, modelo, duracion=35):
         }
 
     informe = ensamblar_por_bloques(
-        borrador, duracion=duracion, modelo=modelo, premisa=idea)
+        borrador, duracion=duracion, modelo=modelo, premisa=idea,
+        reutilizar_borrador=True)
     completo = informe.get("guion")
     if not isinstance(completo, dict):
         completo = borrador
