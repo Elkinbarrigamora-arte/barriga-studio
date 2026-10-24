@@ -97,6 +97,44 @@ class PruebasPorBloques(unittest.TestCase):
             [x["origen"] for x in salida["historial_bloques"]],
             ["BORRADOR_VALIDADO_LOCALMENTE"] * 3)
 
+    def test_gancho_9_palabras_sin_ayer_usa_respaldo_fiel(self):
+        idea = ("Un hombre recibe una carta escrita ayer por su hermano "
+                "desaparecido hace veinte años.")
+        draft = original()
+        draft.update(
+            gancho="Juan recibe una carta de su hermano desaparecido",
+            historia=HISTORIA_CORTA,
+            cierre=CIERRE_CORTO,
+        )
+        llamadas = []
+        def simular(prompt, modelo):
+            llamadas.append(prompt)
+            raise AssertionError("No debe solicitar un gancho a Ollama")
+        resultado = ensamblar_por_bloques(
+            draft, generador=simular, premisa=idea,
+            estrategia_gancho="reglas-primero", reutilizar_borrador=True)
+        self.assertEqual(resultado["guion"]["gancho"],
+                         "¡La carta de su hermano fue escrita ayer!")
+        self.assertEqual(llamadas, [])
+        self.assertEqual(
+            resultado["historial_bloques"][0]["origen"],
+            "REGLA_FIEL_A_PREMISA")
+
+    def test_gancho_valido_se_conserva_con_regla_activada(self):
+        idea = ("Un hombre recibe una carta escrita ayer por su hermano "
+                "desaparecido hace veinte años.")
+        draft = original()
+        draft.update(gancho=GANCHO_CORTO, historia=HISTORIA_CORTA,
+                     cierre=CIERRE_CORTO)
+        def simular(prompt, modelo):
+            raise AssertionError("Guion ya válido, no regenerar")
+        resultado = ensamblar_por_bloques(
+            draft, generador=simular, premisa=idea,
+            estrategia_gancho="reglas-primero", reutilizar_borrador=True)
+        self.assertEqual(resultado["guion"]["gancho"], GANCHO_CORTO)
+        self.assertEqual(resultado["historial_bloques"][0]["origen"],
+                         "BORRADOR_VALIDADO_LOCALMENTE")
+
     def test_aceleracion_solo_regenera_bloque_defectuoso(self):
         draft = original()
         draft.update(gancho=GANCHO_CORTO, cierre=CIERRE_CORTO)
