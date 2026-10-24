@@ -220,6 +220,52 @@ class MotorUnificadoTest(unittest.TestCase):
         self.assertIn("hecho concreto", intento2)
         armar.assert_not_called()
 
+    def test_rechaza_desaparicion_reducida_al_gancho(self):
+        idea = ("Un hombre recibe una carta escrita ayer por su hermano "
+                "desaparecido hace veinte años.")
+        guion = {
+            "gancho": ("Su hermano desapareció hace veinte años; "
+                       "ayer llegó su carta."),
+            "historia": ("La carta escrita ayer llevó a Juan a investigar "
+                        "una dirección antigua y un laboratorio misterioso. "
+                        "Al final encontró una fotografía."),
+            "cierre": "El documento revelaba el verdadero lugar de cautiverio.",
+        }
+        motivos = auditar_fidelidad(idea, guion)
+        self.assertTrue(any("HISTORIA no identifica" in m for m in motivos), motivos)
+        self.assertTrue(any("HISTORIA omite la duración" in m for m in motivos),
+                        motivos)
+
+    def test_rechaza_cierre_repetitivo_aunque_conserve_los_veinte_anos(self):
+        idea = ("Un hombre recibe una carta escrita ayer por su hermano "
+                "desaparecido hace veinte años. Al seguir las pistas "
+                "descubre una verdad inesperada.")
+        guion = {
+            "gancho": "¡La carta de su hermano fue escrita ayer!",
+            "historia": ("Juan recibió una carta de Mateo, su hermano "
+                        "desaparecido hace veinte años. Las pistas lo "
+                        "llevaron a encontrarlo herido, perseguido por "
+                        "una organización secreta."),
+            "cierre": ("Mateo, herido, revela que la organización "
+                       "planeaba matarlo. Juan promete protegerlo."),
+        }
+        motivos = auditar_fidelidad(idea, guion)
+        self.assertTrue(any("Cierre inconcluso" in m for m in motivos), motivos)
+
+    def test_conserva_cierre_con_hecho_causal_comprobable(self):
+        idea = ("Un hombre recibe una carta escrita ayer por su hermano "
+                "desaparecido hace veinte años. Al seguir las pistas "
+                "descubre una verdad inesperada.")
+        guion = {
+            "gancho": "¡La carta de su hermano fue escrita ayer!",
+            "historia": ("Juan siguió las pistas de la carta escrita ayer "
+                        "por Mateo, su hermano desaparecido hace veinte "
+                        "años, hasta el archivo judicial abandonado."),
+            "cierre": ("Mateo mostró la prueba: su padre falsificó los "
+                       "registros para encubrir su cautiverio."),
+        }
+        self.assertEqual(auditar_fidelidad(idea, guion), [])
+
     def test_regresion_intercambio_hermano_por_esposa(self):
         """La nueva carta se conserva, pero no se puede cambiar al desaparecido."""
         idea = ("Un hombre recibe una carta escrita ayer por su hermano "
