@@ -280,7 +280,7 @@ def prompt_para_bloque(nombre, original, generado, limites, anterior=None):
 
 def generar_texto_local(prompt, modelo=MODELO, timeout=150,
                          num_predict=240, temperatura=0.2):
-    """Llamada únicamente a la instancia local de Ollama, sin APIs pagas."""
+    """Ollama local: rechazar JSON cortado y explicar si agotó tokens."""
     datos = {
         "model": modelo,
         "prompt": prompt,
@@ -301,10 +301,36 @@ def generar_texto_local(prompt, modelo=MODELO, timeout=150,
     try:
         with urlopen(req, timeout=timeout) as resp:
             envelope = json.loads(resp.read().decode("utf-8"))
-        payload = json.loads(envelope["response"])
-        texto = payload.get("texto")
-    except (URLError, OSError, TimeoutError, KeyError, ValueError, TypeError) as exc:
-        raise ErrorNarrativa("Ollama local no devolvió el bloque válido: " + str(exc)) from exc
+    except (URLError, OSError, TimeoutError, ValueError, TypeError) as exc:
+        raise ErrorNarrativa(
+            "Error de conexión o respuesta HTTP de Ollama local: " + str(exc)
+        ) from exc
+    if not isinstance(envelope, dict):
+        raise ErrorNarrativa("Ollama devolvió una respuesta HTTP no estructurada")
+    respuesta = envelope.get("response")
+    if not isinstance(respuesta, str):
+        raise ErrorNarrativa("Ollama no devolvió el campo response de texto")
+    razon = envelope.get("done_reason")
+    tokens = envelope.get("eval_count", "desconocidos")
+    if razon == "length":
+        raise ErrorNarrativa(
+            "OLLAMA_TRUNCADO_POR_LIMITE_TOKENS: agotó num_predict={} "
+            "(tokens_generados={}, caracteres_recibidos={}); no se "
+            "acepta una frase incompleta".format(
+                num_predict, tokens, len(respuesta)))
+    try:
+        payload = json.loads(respuesta)
+    except (ValueError, TypeError) as exc:
+        raise ErrorNarrativa(
+            "OLLAMA_JSON_INVALIDO: el modelo entregó un JSON incompleto "
+            "o mal formado (done_reason={}, num_predict={}, "
+            "tokens_generados={}, caracteres_recibidos={}): {}".format(
+                razon or "no_informado", num_predict, tokens,
+                len(respuesta), str(exc))
+        ) from exc
+    if not isinstance(payload, dict):
+        raise ErrorNarrativa("Ollama devolvió JSON, pero no un objeto de texto")
+    texto = payload.get("texto")
     if not isinstance(texto, str) or not texto.strip():
         raise ErrorNarrativa("El bloque generado está vacío o es inválido")
     return " ".join(texto.split())
@@ -454,8 +480,8 @@ def ensamblar_por_bloques(original, duracion=35, modelo=MODELO,
             prompt = prompt_para_bloque(bloque, original, aprobados, limites, previo)
             try:
                 if generador is generar_texto_local:
-                    limite_tokens = {"gancho": 75, "historia": 230,
-                                     "cierre": 115}[bloque]
+                    limite_tokens = {"gancho": 75, "historia": 420,
+                                     "cierre": 170}[bloque]
                     texto = generador(
                         prompt, modelo=modelo, num_predict=limite_tokens,
                         temperatura=(0.2 if numero == 1 else 0.65))
