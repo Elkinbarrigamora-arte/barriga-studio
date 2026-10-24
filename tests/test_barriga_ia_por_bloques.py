@@ -12,10 +12,17 @@ from barriga_ia_narrativa import ErrorNarrativa, contar_palabras
 from barriga_ia_por_bloques import (
     ensamblar_por_bloques, generar_texto_local, limites_de_bloques,
     prompt_para_bloque, proponer_gancho_seguro, main,
+    leer_sesion_por_bloques, detectar_problemas_editoriales,
 )
 
 GANCHO_CORTO = "¡Daniel encontró una carta escrita ayer!"
-HISTORIA_CORTA = "Daniel " + " ".join(["descubrió"] * 64)
+HISTORIA_CORTA = (
+    "Daniel siguió el rastro de la carta hasta el faro abandonado. "
+    "Allí encontró una fotografía de Mateo frente a la puerta, tomada aquella misma mañana. "
+    "Un pescador aseguró haber visto su antigua chaqueta cerca del muelle. "
+    "Daniel revisó el sobre y descubrió una dirección escrita a mano. "
+    "Al llegar al lugar, escuchó pasos detrás de una pared y reconoció la voz de su hermano desaparecido."
+)
 CIERRE_CORTO = (
     "Mateo estaba vivo bajo el faro y sostenía una segunda carta "
     "que Daniel jamás había enviado."
@@ -375,6 +382,97 @@ class PruebasPorBloques(unittest.TestCase):
         self.assertEqual(salida["estado"], "BLOQUE_RECHAZADO_GANCHO")
         self.assertIn("Ollama detenido", salida["historial_bloques"][0]["error"])
         self.assertEqual(len(salida["historial_bloques"]), 2)
+
+
+class PruebasRecuperacionSexta(unittest.TestCase):
+    def crear_informe_sexta(self):
+        borrador = original()
+        return {
+            "guion_original": borrador,
+            "estado": "BLOQUE_RECHAZADO_HISTORIA",
+            "historial_bloques": [
+                {"bloque": "gancho", "intento": 1,
+                 "texto": GANCHO_CORTO, "palabras": 6,
+                 "longitud_valida": True, "aceptable_para_ensamblaje": True,
+                 "motivos_rechazo": []},
+                {"bloque": "historia", "intento": 1,
+                 "texto": "Daniel " + "descubrió " * 121,
+                 "palabras": 122, "aceptable_para_ensamblaje": False,
+                 "motivos_rechazo": ["Extensión 122 palabras fuera de 63 a 70"]},
+                {"bloque": "historia", "intento": 2,
+                 "texto": "Daniel leyó la carta y encontró que había cometido ",
+                 "palabras": 10, "aceptable_para_ensamblaje": False,
+                 "motivos_rechazo": ["Oración incompleta"]},
+            ],
+            "guion": None,
+            "publicacion_automatica_autorizada": False,
+        }
+
+    def test_reanudar_conserva_gancho_y_solo_regenera_historia_y_cierre(self):
+        informe = self.crear_informe_sexta()
+        respuestas = iter([
+            "Daniel " + " ".join(["pensó"] * 64),  # truncado aunque mida 65
+            HISTORIA_CORTA,
+            CIERRE_CORTO,
+        ])
+        prompts = []
+        def simular(prompt, modelo):
+            prompts.append(prompt)
+            return next(respuestas)
+        salida = ensamblar_por_bloques(
+            original(), sesion_previa=informe, generador=simular)
+        self.assertEqual(len(prompts), 3)
+        self.assertEqual(salida["guion"]["gancho"], GANCHO_CORTO)
+        self.assertEqual(salida["guion"]["historia"], HISTORIA_CORTA)
+        self.assertEqual(salida["estado"], "REVISION_HUMANA_PENDIENTE")
+        self.assertEqual(salida["registros_recuperados"], 3)
+        self.assertEqual(salida["historial_bloques"][:3], informe["historial_bloques"])
+        self.assertTrue(any("Oración incompleta" in x
+                            for x in salida["historial_bloques"][3]["motivos_rechazo"]))
+        self.assertIn("PLAN ALTERNATIVO", prompts[0])
+        self.assertIn("PLAN ALTERNATIVO", prompts[1])
+        self.assertEqual(salida["evaluacion"]["palabras"], 87)
+        self.assertFalse(salida["publicacion_automatica_autorizada"])
+
+    def test_no_aceptar_respuesta_repetida_historicamente(self):
+        informe = self.crear_informe_sexta()
+        repetido = "Daniel " + " ".join(["descubrió"] * 121)
+        guion = ensamblar_por_bloques(
+            original(), sesion_previa=informe,
+            generador=lambda prompt, modelo: repetido)
+        self.assertEqual(guion["estado"], "BLOQUE_RECHAZADO_HISTORIA")
+        self.assertTrue(any("repetida" in x for x in
+                            guion["historial_bloques"][-1]["motivos_rechazo"]))
+        self.assertEqual(guion["bloques_aprobados_en_longitud"]["gancho"], 6)
+
+    def test_leer_archivo_sexta_sin_editar_ni_sobrescribir(self):
+        informe = self.crear_informe_sexta()
+        with tempfile.TemporaryDirectory() as carpeta:
+            ruta = Path(carpeta) / "sexta-prueba.json"
+            contenido = json.dumps(informe, ensure_ascii=False)
+            ruta.write_text(contenido, encoding="utf-8")
+            guion, recuperado = leer_sesion_por_bloques(ruta)
+            self.assertEqual(guion, informe["guion_original"])
+            self.assertEqual(recuperado, informe)
+            self.assertEqual(ruta.read_text(encoding="utf-8"), contenido)
+
+    def test_oracion_truncada_se_rechaza_incluso_con_65_palabras(self):
+        texto = HISTORIA_CORTA.rstrip(".") + " y"
+        self.assertIn("Oración incompleta",
+                      " ".join(detectar_problemas_editoriales(
+                          texto, original(), "historia")))
+
+    def test_velocidad_configurable_cambia_estimacion(self):
+        from barriga_ia_narrativa import evaluar_guion
+        guion = original()
+        a = evaluar_guion(guion, 35, 150)
+        b = evaluar_guion(guion, 35, 120)
+        self.assertGreater(b["segundos_estimados"], a["segundos_estimados"])
+        self.assertEqual(limites_de_bloques(35), {
+            "gancho": (5, 8), "historia": (63, 70), "cierre": (13, 18)})
+        self.assertNotEqual(limites_de_bloques(35, 120)["historia"], (63, 70))
+        with self.assertRaises(ErrorNarrativa):
+            evaluar_guion(guion, 35, 20)
 
 
 if __name__ == "__main__":
