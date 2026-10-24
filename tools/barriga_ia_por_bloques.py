@@ -87,6 +87,35 @@ def detectar_problemas_editoriales(texto, original, bloque, anterior=None):
                 r"(?<!\w)" + re.escape(nombre) + r"(?!\w)",
                 original_texto, flags=re.IGNORECASE | re.UNICODE):
             problemas.append("Posible personaje o nombre nuevo: " + nombre)
+    # Capturar nombres nuevos al inicio de frase seguidos por una acción:
+    # antes se escapaba "Pepe fue arrestado..." por iniciar oración.
+    palabras_comunes = {
+        "alguien", "nadie", "ella", "ellos", "ellas", "este", "esta",
+        "esto", "aquel", "aquella", "luego", "entonces", "finalmente",
+        "cuando", "mientras", "aunque", "pero", "hoy", "ayer",
+        "mañana", "todos", "todas", "todo", "otro", "otra", "uno",
+        "una", "allí", "aquí", "después", "antes", "cada", "nunca",
+        "siempre", "el", "la", "los", "las", "su", "sus", "solo",
+    }
+    acciones_personales = (
+        r"fue|era|estaba|había|confesó|encontró|dijo|respondió|"
+        r"abrió|llegó|entró|murió|supo|recibió|vio|leyó|"
+        r"quiso|hizo|tenía|logró|sostuvo|descubrió|escuchó|"
+        r"reconoció|entregó|escribió|corrió|pidió"
+    )
+    for frase in re.split(r"(?<=[.!?…])\s+", sin_citas.strip()):
+        coincidencia = re.match(
+            r'^[¿¡(“"\s]*([A-ZÁÉÍÓÚÑ][a-záéíóúñ]{2,})\s+'
+            r"(?:{})\b".format(acciones_personales), frase)
+        if not coincidencia:
+            continue
+        nombre = coincidencia.group(1)
+        if nombre.casefold() in palabras_comunes:
+            continue
+        if not re.search(
+                r"(?<!\w)" + re.escape(nombre) + r"(?!\w)",
+                original_texto, flags=re.IGNORECASE | re.UNICODE):
+            problemas.append("Posible personaje o nombre nuevo: " + nombre)
     if bloque == "gancho":
         origen = (str(original.get("gancho", "")) + " " +
                   str(original.get("historia", ""))[:350]).casefold()
@@ -261,6 +290,31 @@ def prompt_para_bloque(nombre, original, generado, limites, anterior=None):
             "Ejemplo de estructura (no copies): " + ej + ". "
             "Solo JSON con el campo texto. Contexto: " + contexto_corto
         )
+    if nombre == "cierre":
+        # Encargo corto y separado: no pedir de nuevo la historia.
+        # El texto rechazado nunca vuelve al prompt.
+        datos_cierre = {
+            "gancho_aprobado": generado["gancho"],
+            "historia_aprobada": generado["historia"],
+            "cierre_borrador": original.get("cierre", "")[:240],
+            "personajes_permitidos": [
+                p.get("nombre", "") for p in original.get("personajes", [])
+                if isinstance(p, dict)
+            ],
+            "motivos_rechazo_previo": (
+                anterior.get("motivos_rechazo", []) if anterior else []),
+        }
+        return (
+            "ESCRIBE SOLAMENTE EL DESENLACE DE ESTE RELATO. "
+            "UNA SOLA ORACION COMPLETA de {} a {} palabras; "
+            "OBJETIVO {} palabras. Es el cierre, NO vuelvas a narrar "
+            "la historia. Resuelve o revela algo ya preparado en "
+            "el desarrollo aprobado. NO introduzcas personajes, "
+            "objetos, lugares, delitos ni tramas ajenos al desarrollo. "
+            "Cierra con punto. Cuenta antes de entregar. "
+            'RESPONDE SOLO JSON {{"texto":"..."}}. DATOS: '
+        ).format(minimo, maximo, (minimo + maximo) // 2) + json.dumps(
+            datos_cierre, ensure_ascii=False)
     if anterior and nombre in ("historia", "cierre"):
         # No mostrar el texto rechazado: en modelos pequeños ancla la salida
         # a la misma historia, incluso cuando se pide no repetirla.
@@ -443,6 +497,58 @@ def condensar_historia_sin_cortar(texto, original, limites, anterior=None,
     return opciones[0][1]
 
 
+
+def condensar_cierre_sin_cortar(texto, original, generado, limites,
+                                rechazados=()):
+    """Rescatar únicamente un final consecutivo de frases completas.
+
+    Conserva el desenlace final, impide personajes nuevos y exige que al
+    menos dos palabras significativas estén presentes en bloques aprobados.
+    No confirma causalidad o calidad: requiere revisión humana.
+    """
+    minimo, maximo = limites["cierre"]
+    if not isinstance(texto, str) or not maximo < contar_palabras(texto) <= maximo * 4:
+        return None
+    frases = [x.strip() for x in re.split(
+        r"(?<=[.!?…])\s+(?=[¡¿“\"A-ZÁÉÍÓÚÑ])", texto.strip()) if x.strip()]
+    if not 2 <= len(frases) <= 8:
+        return None
+    if any(not re.search(r"[.!?…][”\"’']?$", frase) for frase in frases):
+        return None
+    stop = {
+        "para", "desde", "entre", "sobre", "hasta", "había", "estaba",
+        "habían", "aquella", "aquel", "aquel", "ellos", "ella", "ellas",
+        "entonces", "porque", "cuando", "después", "antes", "donde",
+        "aquí", "allí", "todavía", "otra", "otro", "todo", "todos",
+        "todas", "cada", "pero", "aunque", "solo", "también", "había",
+        "nunca", "siempre", "ahora", "como", "esto", "esta", "este",
+        "esas", "esos", "quien", "cual", "mismo", "misma", "fue",
+        "eran", "algo", "alguien", "nadie",
+    }
+    def sustantivas(frase):
+        return {
+            palabra for palabra in re.findall(
+                r"\b\w{4,}\b", frase.casefold(), flags=re.UNICODE)
+            if palabra not in stop
+        }
+    base = sustantivas(
+        generado.get("gancho", "") + " " + generado.get("historia", ""))
+    for comienzo in range(len(frases) - 1, -1, -1):
+        candidato = " ".join(frases[comienzo:])
+        if not minimo <= contar_palabras(candidato) <= maximo:
+            continue
+        if len(sustantivas(candidato) & base) < 2:
+            continue
+        if detectar_problemas_editoriales(candidato, original, "cierre"):
+            continue
+        if any(normalizar_comparacion(candidato) ==
+               normalizar_comparacion(otro)
+               for otro in rechazados if isinstance(otro, str)):
+            continue
+        return candidato
+    return None
+
+
 def ensamblar_por_bloques(original, duracion=35, modelo=MODELO,
                           max_intentos=2, generador=None,
                           gancho_aprobado=None, estrategia_gancho="modelo",
@@ -560,6 +666,12 @@ def ensamblar_por_bloques(original, duracion=35, modelo=MODELO,
                     if condensado:
                         texto = condensado
                         origen_edicion = "EXTRACCION_DE_ORACIONES_COMPLETAS"
+                if bloque == "cierre" and contar_palabras(texto) > limites[bloque][1]:
+                    condensado = condensar_cierre_sin_cortar(
+                        texto, original, aprobados, limites, rechazos_anteriores)
+                    if condensado:
+                        texto = condensado
+                        origen_edicion = "EXTRACCION_CIERRE_ORACIONES_COMPLETAS"
                 palabras = contar_palabras(texto)
                 minimo, maximo = limites[bloque]
                 valido = minimo <= palabras <= maximo
