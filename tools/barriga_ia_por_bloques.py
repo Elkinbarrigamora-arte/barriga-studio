@@ -106,7 +106,7 @@ def detectar_problemas_editoriales(texto, original, bloque, anterior=None):
     for frase in re.split(r"(?<=[.!?…])\s+", sin_citas.strip()):
         coincidencia = re.match(
             r'^[¿¡(“"\s]*([A-ZÁÉÍÓÚÑ][a-záéíóúñ]{2,})\s+'
-            r"(?:{})\b".format(acciones_personales), frase)
+            + r"(?:{})\b".format(acciones_personales), frase)
         if not coincidencia:
             continue
         nombre = coincidencia.group(1)
