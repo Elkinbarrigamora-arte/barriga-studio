@@ -13,6 +13,7 @@ from barriga_ia_por_bloques import (
     ensamblar_por_bloques, generar_texto_local, limites_de_bloques,
     prompt_para_bloque, proponer_gancho_seguro, main,
     leer_sesion_por_bloques, detectar_problemas_editoriales,
+    condensar_historia_sin_cortar,
 )
 
 GANCHO_CORTO = "¡Daniel encontró una carta escrita ayer!"
@@ -463,6 +464,73 @@ class PruebasPorBloques(unittest.TestCase):
         self.assertEqual(salida["estado"], "BLOQUE_RECHAZADO_GANCHO")
         self.assertIn("Ollama detenido", salida["historial_bloques"][0]["error"])
         self.assertEqual(len(salida["historial_bloques"]), 2)
+
+
+HISTORIA_LARGA_COMPRESIBLE = " ".join((
+    "Daniel abrió la carta y reconoció la letra de Mateo desaparecido.",
+    "El sobre tenía una fecha reciente escrita con tinta todavía fresca.",
+    "Buscó la dirección del remitente y salió rápidamente hacia el puerto.",
+    "En el muelle encontró una fotografía escondida bajo una tabla suelta.",
+    "La imagen mostraba una puerta antigua detrás del faro abandonado.",
+    "Al acercarse escuchó pasos y distinguió una voz desde el sótano.",
+    "Daniel reconoció a Mateo, quien pidió ayuda desde el otro lado.",
+))
+
+
+class PruebasRescateEditorial(unittest.TestCase):
+    def test_rescata_historia_larga_con_oraciones_enteras(self):
+        self.assertEqual(contar_palabras(HISTORIA_LARGA_COMPRESIBLE), 76)
+        compacta = condensar_historia_sin_cortar(
+            HISTORIA_LARGA_COMPRESIBLE, original(), limites_de_bloques(35))
+        self.assertIsNotNone(compacta)
+        self.assertTrue(63 <= contar_palabras(compacta) <= 70)
+        self.assertTrue(compacta.startswith("Daniel abrió la carta"))
+        self.assertTrue(compacta.endswith("desde el otro lado."))
+        self.assertNotIn("Posible personaje", " ".join(
+            detectar_problemas_editoriales(compacta, original(), "historia")))
+        self.assertNotEqual(compacta, HISTORIA_LARGA_COMPRESIBLE)
+
+    def test_rescate_integrado_conserva_texto_bruto_y_cierre(self):
+        respuestas = iter([HISTORIA_LARGA_COMPRESIBLE, CIERRE_CORTO])
+        salida = ensamblar_por_bloques(
+            original(), gancho_aprobado=GANCHO_CORTO,
+            generador=lambda prompt, modelo: next(respuestas))
+        self.assertEqual(salida["estado"], "REVISION_HUMANA_PENDIENTE")
+        self.assertEqual(salida["guion"]["gancho"], GANCHO_CORTO)
+        self.assertTrue(63 <= contar_palabras(salida["guion"]["historia"]) <= 70)
+        informe = salida["historial_bloques"][1]
+        self.assertEqual(informe["texto_bruto"], HISTORIA_LARGA_COMPRESIBLE)
+        self.assertEqual(informe["origen_edicion"], "EXTRACCION_DE_ORACIONES_COMPLETAS")
+        self.assertTrue(informe["aceptable_para_ensamblaje"])
+        self.assertFalse(salida["publicacion_automatica_autorizada"])
+
+    def test_nunca_restaura_historia_mecanica_sin_frases(self):
+        candidata = "Daniel " + "descubrió " * 127
+        compacta = condensar_historia_sin_cortar(
+            candidata, original(), limites_de_bloques(35))
+        self.assertIsNone(compacta)
+
+    def test_nuevo_personaje_en_aposicion_es_rechazado(self):
+        texto = (
+            "Al abrir el sobre encontró la carta. "
+            "Pepe, siempre rebelde, había confesado un secreto."
+        )
+        problemas = detectar_problemas_editoriales(
+            texto, original(), "historia")
+        self.assertIn("Posible personaje o nombre nuevo: Pepe", problemas)
+
+    def test_reintento_no_reinyecta_historia_rechazada(self):
+        rechazado = {
+            "texto": "Pepe, siempre rebelde, había confesado un secreto.",
+            "motivos_rechazo": ["Extensión 128 palabras fuera de 63 a 70"],
+            "palabras": 128,
+        }
+        prompt = prompt_para_bloque(
+            "historia", original(), {"gancho": GANCHO_CORTO},
+            limites_de_bloques(35), anterior=rechazado)
+        self.assertIn("PLAN ALTERNATIVO", prompt)
+        self.assertIn("128 palabras", prompt)
+        self.assertNotIn("Pepe, siempre rebelde", prompt)
 
 
 class PruebasRecuperacionSexta(unittest.TestCase):
