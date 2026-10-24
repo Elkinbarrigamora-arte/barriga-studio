@@ -79,8 +79,15 @@ PANEL = r'''
         'BORRADOR RECHAZADO O INCOMPLETO; revisar antes de utilizar.';
       const motivos=Array.isArray(data.motivos_fidelidad)?
         data.motivos_fidelidad.join('; '):'';
+      const perf=data.rendimiento||{};
+      const detalle=(typeof perf.llamadas_ollama==='number')?
+        (' · Ollama: '+perf.llamadas_ollama+' llamadas'
+         +(data.segundos?' · '+data.segundos+' s':'')
+         +(typeof perf.tokens_por_segundo==='number'?
+           ' · '+perf.tokens_por_segundo+' tokens/s':''))
+        :'';
       msg.textContent=msgEstado+' ID: '+data.id+'. Estado: '+data.estado+
-        (motivos?'. Motivos: '+motivos:'')+'.';
+        (motivos?'. Motivos: '+motivos:'')+'.'+detalle;
    }
    async function refrescar(){
       const resp=await fetch('/api/historial',{headers:cabeceras});
@@ -164,6 +171,7 @@ def presentar_generacion(resultado, ident):
         "publicacion_automatica_autorizada": False,
         "modelo": resultado.get("modelo", ""),
         "segundos": resultado.get("segundos_inferencia", 0),
+        "rendimiento": resultado.get("rendimiento", {}),
     }
 
 
