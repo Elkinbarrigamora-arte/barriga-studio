@@ -15,7 +15,7 @@ from barriga_ia_narrativa import ErrorNarrativa
 from barriga_ia_fidelidad import auditar_fidelidad
 from barriga_ia_servicio_local import (
     abrir_generacion, ejecutar_motor, guardar_generacion,
-    inicializar, listar_generaciones, validar_solicitud,
+    inicializar, listar_generaciones, validar_solicitud, reanudar_cierre,
 )
 from puente_local import servidor, presentar_generacion
 
@@ -277,6 +277,80 @@ class MotorUnificadoTest(unittest.TestCase):
                          ["Cierre genérico: sin revelación concreta"])
         self.assertFalse(vista["apto_para_revision_humana"])
 
+    def test_reanudar_unicamente_el_cierre_conservando_original(self):
+        idea = ("Un hombre recibe una carta escrita ayer por su hermano "
+                "desaparecido hace veinte años.")
+        historia = (
+            "Daniel siguió el rastro de la carta hasta el faro abandonado. "
+            "Allí encontró una fotografía de Mateo frente a la puerta, "
+            "tomada aquella misma mañana. Un pescador aseguró haber visto "
+            "su antigua chaqueta cerca del muelle. Daniel revisó el sobre "
+            "y descubrió una dirección escrita a mano. Al llegar al lugar, "
+            "escuchó pasos detrás de una pared y reconoció la voz de su "
+            "hermano desaparecido hace veinte años."
+        )
+        gancho = "¡Daniel encontró una carta escrita ayer!"
+        cierre = (
+            "Mateo estaba vivo bajo el faro y sostenía una segunda carta "
+            "que Daniel jamás había enviado."
+        )
+        borr = dict(borrador(), gancho=gancho, historia=historia)
+        def fila(bloque, texto, aprobada, intento=1):
+            return {
+                "bloque": bloque, "texto": texto, "intento": intento,
+                "palabras": len(texto.split()),
+                "longitud_valida": aprobada,
+                "aceptable_para_ensamblaje": aprobada,
+                "motivos_rechazo": [] if aprobada else
+                    ["Extensión 20 palabras fuera de 13 a 18"],
+            }
+        informe = {
+            "guion_original": borr,
+            "historial_bloques": [
+                fila("gancho", gancho, True),
+                fila("historia", historia, True),
+                fila("cierre", "Mateo revela algo que solo el sabia.", False),
+            ]
+        }
+        data = resultado_mock("BLOQUE_RECHAZADO_CIERRE")
+        data.update(idea=idea, duracion_objetivo=35,
+                    guion=borr, informe=informe)
+        with tempfile.TemporaryDirectory() as temp:
+            db = inicializar(Path(temp) / "local" / "guiones.sqlite3")
+            viejo = guardar_generacion(data, db)
+            with patch("barriga_ia_servicio_local.generar_local") as completo:
+                with patch("barriga_ia_por_bloques.generar_texto_local",
+                           return_value=cierre) as bloque:
+                    reparado, nuevo = reanudar_cierre(viejo, "modelo-local", db)
+            completo.assert_not_called()
+            bloque.assert_called_once()
+            self.assertNotEqual(nuevo, viejo)
+            self.assertEqual(reparado["reanudado_desde"], viejo)
+            self.assertEqual(reparado["guion"]["gancho"], gancho)
+            self.assertEqual(reparado["guion"]["historia"], historia)
+            self.assertEqual(reparado["guion"]["cierre"], cierre)
+            self.assertEqual(reparado["estado"], "REVISION_HUMANA_PENDIENTE")
+            self.assertFalse(reparado["publicacion_automatica_autorizada"])
+            self.assertEqual(
+                abrir_generacion(viejo, db)["estado"],
+                "BLOQUE_RECHAZADO_CIERRE")
+            self.assertEqual(abrir_generacion(nuevo, db)["guion"]["cierre"],
+                             cierre)
+
+    def test_reanudar_no_acepta_registros_sin_bloques_aprobados(self):
+        data = resultado_mock("BLOQUE_RECHAZADO_CIERRE")
+        data["informe"] = {"guion_original": borrador(),
+                           "historial_bloques": []}
+        with tempfile.TemporaryDirectory() as temp:
+            db = inicializar(Path(temp) / "local" / "guiones.sqlite3")
+            viejo = guardar_generacion(data, db)
+            with patch("barriga_ia_servicio_local.ensamblar_por_bloques") as g:
+                with self.assertRaisesRegex(ErrorNarrativa,
+                                            "no son recuperables"):
+                    reanudar_cierre(viejo, "modelo-local", db)
+            g.assert_not_called()
+            self.assertEqual(len(listar_generaciones(db)), 1)
+
     def test_persistencia_real_y_lectura_con_diferentes_conexiones(self):
         with tempfile.TemporaryDirectory() as tmp:
             db = Path(tmp) / "local-data" / "generaciones.sqlite3"
@@ -445,6 +519,29 @@ class PuenteHTTPTest(unittest.TestCase):
                 primera_fin.set()
                 hilo.join(timeout=4)
         self.assertEqual(resultados[0][0], 200)
+
+    def test_post_reparar_cierre_es_privado_y_no_publica(self):
+        identificador = "BI-" + "a" * 20
+        endpoint = "/api/guion/reparar-cierre"
+        origen = "http://127.0.0.1:{}".format(self.port)
+        estado, _ = self.pedir(endpoint, "POST", {"id": identificador})
+        self.assertEqual(estado, 403)
+        estado, _ = self.pedir(
+            endpoint, "POST", {"id": "invalido"},
+            token="clave-prueba", origin=origen)
+        self.assertEqual(estado, 400)
+        reparado = resultado_mock()
+        reparado["reanudado_desde"] = identificador
+        with patch("puente_local.reanudar_cierre",
+                   return_value=(reparado, "BI-" + "b" * 20)) as reanudar:
+            estado, body = self.pedir(
+                endpoint, "POST", {"id": identificador},
+                token="clave-prueba", origin=origen)
+        self.assertEqual(estado, 200)
+        salida = json.loads(body)
+        self.assertEqual(salida["reanudado_desde"], identificador)
+        self.assertFalse(salida["publicacion_automatica_autorizada"])
+        reanudar.assert_called_once_with(identificador, "modelo-local", self.db)
 
     def test_get_ruta_desconocida_y_header_antiframe(self):
         status, _ = self.pedir("/api/desconocido")
