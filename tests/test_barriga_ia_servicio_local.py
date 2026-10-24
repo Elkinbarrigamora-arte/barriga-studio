@@ -17,7 +17,7 @@ from barriga_ia_servicio_local import (
     abrir_generacion, ejecutar_motor, guardar_generacion,
     inicializar, listar_generaciones, validar_solicitud,
 )
-from puente_local import servidor
+from puente_local import servidor, presentar_generacion
 
 
 def borrador():
@@ -262,6 +262,19 @@ class MotorUnificadoTest(unittest.TestCase):
             self.assertEqual(result["estado"], "PREMISA_DESVIADA")
             self.assertFalse(result["apto_para_revision_humana"])
             self.assertTrue(result["motivos_fidelidad"])
+
+    def test_error_cierre_exhibe_motivo_de_rechazo(self):
+        resultado = resultado_mock("BLOQUE_RECHAZADO_CIERRE")
+        resultado["informe"] = {"historial_bloques": [
+            {"bloque": "cierre", "intento": 1,
+             "motivos_rechazo": ["Extensión 29 palabras fuera de 13 a 18"]},
+            {"bloque": "cierre", "intento": 2,
+             "motivos_rechazo": ["Cierre genérico: sin revelación concreta"]},
+        ]}
+        vista = presentar_generacion(resultado, "BI-" + "0" * 20)
+        self.assertEqual(vista["motivos_bloque"],
+                         ["Cierre genérico: sin revelación concreta"])
+        self.assertFalse(vista["apto_para_revision_humana"])
 
     def test_persistencia_real_y_lectura_con_diferentes_conexiones(self):
         with tempfile.TemporaryDirectory() as tmp:
