@@ -251,21 +251,22 @@ def prompt_para_bloque(nombre, original, generado, limites, anterior=None):
             "Solo JSON con el campo texto. Contexto: " + contexto_corto
         )
     if anterior and nombre in ("historia", "cierre"):
-        # Reintento distinto: breve, con causa y efecto, y rechazo explícito.
+        # No mostrar el texto rechazado: en modelos pequeños ancla la salida
+        # a la misma historia, incluso cuando se pide no repetirla.
         return (
-            "PLAN ALTERNATIVO PARA {}: reescribe SOLO esta sección en español. "
-            "No copies el intento fallido. ENTRE {} Y {} PALABRAS exactas; "
-            "termina todas las oraciones con punto. Escribe acciones y "
-            "consecuencias en secuencia. No agregues protagonistas, fechas "
-            'ni desenlaces ajenos a la premisa. Responde solo {{"texto":"..."}}. '
-            "Diagnóstico: "
-        ).format(nombre.upper(), minimo, maximo) + json.dumps({
-            "motivos_del_rechazo": anterior.get("motivos_rechazo", []),
-            "texto_rechazado": anterior.get("texto", "")[:250],
-            "gancho_inmutable": generado.get("gancho"),
-            "historia_inmutable": generado.get("historia"),
-            "borrador_historia": original.get("historia", "")[:850],
-            "borrador_cierre": original.get("cierre", "")[:250],
+            "VERSION BREVE INDEPENDIENTE, SOLO {}. "
+            "Escribe {} a {} palabras en español, nunca más de {}. "
+            "Usa únicamente personajes, fechas y hechos de la premisa. "
+            "Completa el conflicto con acciones concretas y frases cerradas. "
+            'Devuelve solo {{"texto":"..."}}. '
+            "Errores previos (NO reutilices texto anterior): "
+        ).format(nombre.upper(), minimo, maximo, maximo) + json.dumps({
+            "motivos": anterior.get("motivos_rechazo", []),
+            "gancho_aprobado": generado.get("gancho"),
+            "historia_aprobada": generado.get("historia"),
+            "titulo": original.get("titulo", ""),
+            "borrador_historia": original.get("historia", "")[:600],
+            "borrador_cierre": original.get("cierre", "")[:220],
             "personajes_permitidos": original.get("personajes", []),
         }, ensure_ascii=False)
     instruccion = (
@@ -383,6 +384,54 @@ def normalizar_comparacion(texto):
     return re.sub(r"\s+", " ", texto.casefold()).strip(" .!¡?¿…")
 
 
+
+def condensar_historia_sin_cortar(texto, original, limites, anterior=None,
+                                  rechazados=()):
+    """Rescatar una historia larga usando SOLO oraciones completas existentes.
+
+    No inventa eventos, no corta palabras y conserva el orden. Prioriza la
+    apertura y el final del pasaje; siempre exige revisión humana posterior.
+    """
+    minimo, maximo = limites["historia"]
+    if not isinstance(texto, str) or contar_palabras(texto) <= maximo:
+        return None
+    if contar_palabras(texto) > maximo * 3:
+        return None
+    frases = [x.strip() for x in re.split(r"(?<=[.!?…])\s+(?=[¡¿“\"A-ZÁÉÍÓÚÑ])", texto.strip())
+              if x.strip()]
+    if not 5 <= len(frases) <= 14:
+        return None
+    if any(not re.search(r"[.!?…][”\"’']?$", x) for x in frases):
+        return None
+    if any(detectar_problemas_editoriales(x, original, "historia")
+           for x in frases):
+        return None
+    opciones = []
+    # Conservar la apertura y el último hecho para no sacrificar sin control
+    # ni el planteamiento ni la consecuencia del desarrollo.
+    for mascara in range(1 << (len(frases) - 2)):
+        indices = [0] + [i + 1 for i in range(len(frases) - 2)
+                         if mascara & (1 << i)] + [len(frases) - 1]
+        candidato = " ".join(frases[i] for i in indices)
+        palabras = contar_palabras(candidato)
+        if not minimo <= palabras <= maximo:
+            continue
+        if detectar_problemas_editoriales(candidato, original, "historia"):
+            continue
+        if any(normalizar_comparacion(candidato) ==
+               normalizar_comparacion(otro)
+               for otro in rechazados if isinstance(otro, str)):
+            continue
+        # Penalizar el salto sobre oraciones para preferir continuidad.
+        saltos = sum(b - a - 1 for a, b in zip(indices, indices[1:]))
+        cortes = sum(b - a > 1 for a, b in zip(indices, indices[1:]))
+        opciones.append(((cortes, saltos, abs(palabras - 66)), candidato))
+    if not opciones:
+        return None
+    opciones.sort(key=lambda x: x[0])
+    return opciones[0][1]
+
+
 def ensamblar_por_bloques(original, duracion=35, modelo=MODELO,
                           max_intentos=2, generador=None,
                           gancho_aprobado=None, estrategia_gancho="modelo",
@@ -487,6 +536,19 @@ def ensamblar_por_bloques(original, duracion=35, modelo=MODELO,
                         temperatura=(0.2 if numero == 1 else 0.65))
                 else:
                     texto = generador(prompt, modelo=modelo)
+                texto_bruto = texto
+                origen_edicion = None
+                rechazos_anteriores = [
+                    x.get("texto", "") for x in resultado["historial_bloques"]
+                    if isinstance(x, dict) and x.get("bloque") == bloque
+                    and not x.get("aceptable_para_ensamblaje")
+                ]
+                if bloque == "historia" and contar_palabras(texto) > limites[bloque][1]:
+                    condensado = condensar_historia_sin_cortar(
+                        texto, original, limites, previo, rechazos_anteriores)
+                    if condensado:
+                        texto = condensado
+                        origen_edicion = "EXTRACCION_DE_ORACIONES_COMPLETAS"
                 palabras = contar_palabras(texto)
                 minimo, maximo = limites[bloque]
                 valido = minimo <= palabras <= maximo
@@ -495,11 +557,6 @@ def ensamblar_por_bloques(original, duracion=35, modelo=MODELO,
                         palabras, minimo, maximo)]
                 motivos += detectar_problemas_editoriales(
                     texto, original, bloque, previo)
-                rechazos_anteriores = [
-                    x.get("texto", "") for x in resultado["historial_bloques"]
-                    if isinstance(x, dict) and x.get("bloque") == bloque
-                    and not x.get("aceptable_para_ensamblaje")
-                ]
                 if normalizar_comparacion(texto) and any(
                     normalizar_comparacion(texto) == normalizar_comparacion(t)
                     for t in rechazos_anteriores if isinstance(t, str)
@@ -510,6 +567,8 @@ def ensamblar_por_bloques(original, duracion=35, modelo=MODELO,
                     "bloque": bloque,
                     "intento": numero,
                     "texto": texto,
+                    "texto_bruto": texto_bruto if origen_edicion else None,
+                    "origen_edicion": origen_edicion,
                     "palabras": palabras,
                     "limites": [minimo, maximo],
                     "longitud_valida": valido,
