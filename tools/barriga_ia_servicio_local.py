@@ -9,6 +9,7 @@ from datetime import datetime, timezone
 import json
 import os
 from pathlib import Path
+import re
 import secrets
 import sqlite3
 import time
@@ -21,6 +22,9 @@ from barriga_ia_por_bloques import (
 )
 from barriga_ia_fidelidad import auditar_fidelidad
 from barriga_ia_acelerador import medir_solicitud, resumen
+from barriga_ia_contexto import (
+    normalizar_contexto, instrucciones_editoriales, crear_plan_video,
+)
 
 DEFAULT_DB = Path(__file__).resolve().parents[1] / "local-data" / "guiones-locales.sqlite3"
 
@@ -32,30 +36,51 @@ def validar_solicitud(idea, duracion):
         raise ErrorNarrativa("La duración debe estar entre 20 y 60 segundos")
 
 
-def ejecutar_motor(idea, modelo, duracion=35):
+def ejecutar_motor(idea, modelo, duracion=35, contexto=None):
     """Motor instrumentado: contabiliza llamadas y latencia por guion."""
+    contexto = normalizar_contexto(contexto)
     with medir_solicitud() as llamadas:
-        resultado = _ejecutar_motor_impl(idea, modelo, duracion=duracion)
+        resultado = _ejecutar_motor_impl(idea, modelo, duracion=duracion,
+                                       contexto=contexto)
     resultado["rendimiento"] = resumen(llamadas)
+    resultado["contexto_editorial"] = contexto
+    resultado["plan_video"] = crear_plan_video(resultado.get("guion"),
+                                               duracion, contexto)
     return resultado
 
 
-def _ejecutar_motor_impl(idea, modelo, duracion=35):
+def _ejecutar_motor_impl(idea, modelo, duracion=35, contexto=None):
     """Generar, medir fidelidad, ensamblar y exigir revisión humana.
 
     Si se cambia la premisa, no ensambla ni marca el guion como apto.
     Máximo dos intentos de borrador; los fallos también quedan persistibles.
     """
     validar_solicitud(idea, duracion)
+    contexto = normalizar_contexto(contexto)
     inicio = time.monotonic()
     idea = idea.strip()
-    prompt = preparar_solicitud(idea, "ficcion", "ficcion", duracion=duracion)
+    nicho = "miniseries" if contexto["modo"] == "serie" else "ficcion"
+    prompt = preparar_solicitud(idea, nicho, "ficcion", duracion=duracion,
+                                biblia=contexto["biblia"])
+    prompt += instrucciones_editoriales(contexto)
     prompt += (
         "\nPREMISA INMUTABLE DEL AUTOR: " + json.dumps(idea, ensure_ascii=False)
         + "\nEl conflicto, objeto central, personajes definidos y pistas "
           "temporales de esa premisa son OBLIGATORIOS. "
-          "No sustituyas cartas por ríos, objetos mágicos ni conflictos "
-          "nuevos. Evita preguntas al espectador. "
+          "No sustituyas un tema por otro ni inventes conflictos ajenos. "
+          "Evita preguntas al espectador. "
+          "Conserva los datos, cifras y relaciones explícitos de la premisa. "
+          "En CIERRE revela una prueba, motivo o hecho específico que "
+          "resuelva el conflicto sin repetir amenazas ni anunciar secretos "
+          "que no se explican. Devuelve JSON válido y respeta la duración."
+    )
+    # La regresión de la carta no debe contaminar videos sobre otras temáticas.
+    tema_clave = idea.casefold()
+    es_caso_carta = ("carta" in tema_clave and "hermano" in tema_clave
+                     and "desaparec" in tema_clave)
+    if es_caso_carta:
+        prompt += (
+          "\nRESTRICCIONES ESPECÍFICAS DE LA CARTA: "
           "Si una persona desaparece durante años y luego envía una carta, "
           "muestra con hechos por qué desapareció y cómo llegó esa carta. "
           "En HISTORIA identifica sin ambigüedad QUIÉN desapareció, "
@@ -82,10 +107,12 @@ def _ejecutar_motor_impl(idea, modelo, duracion=35):
                 + "; ".join(razones)
                 + ". Vuelve a redactar desde la idea original, no desde "
                   "el borrador defectuoso. Conserva expresamente en el "
-                  "GANCHO y la HISTORIA los hechos familiares y todas las "
+                  "GANCHO y la HISTORIA los hechos, relaciones y todas las "
                   "cifras o cantidades temporales de la premisa. "
-                  "No sustituyas 'desaparecido hace veinte años' por "
-                  "'secuestrado hace años', si la premisa especifica veinte. "
+                  + ("No sustituyas 'desaparecido hace veinte años' por "
+                     "'secuestrado hace años', si la premisa especifica veinte. "
+                     if es_caso_carta else "")
+                  +
                   "Desarrolla una sola cadena de causa, pista y hallazgo. "
                   "No inventes organizaciones o conspiraciones para "
                   "justificar la desaparición sin explicar su papel. "
@@ -218,6 +245,9 @@ def reanudar_cierre(ident, modelo, db=DEFAULT_DB):
         "segundos_inferencia": round(time.monotonic() - inicio, 1),
         "rendimiento": resumen(llamadas),
     }
+    contexto = normalizar_contexto(anterior.get("contexto_editorial"))
+    resultado["contexto_editorial"] = contexto
+    resultado["plan_video"] = crear_plan_video(final, duracion, contexto)
     nuevo_id = guardar_generacion(resultado, db=db)
     return resultado, nuevo_id
 
@@ -238,6 +268,17 @@ def inicializar(db=DEFAULT_DB):
             titulo TEXT NOT NULL,
             datos TEXT NOT NULL
         )""")
+        con.execute("""CREATE TABLE IF NOT EXISTS memorias_series (
+            serie_id TEXT PRIMARY KEY,
+            ficha TEXT NOT NULL,
+            fecha_actualizacion TEXT NOT NULL
+        )""")
+        con.execute("""CREATE TABLE IF NOT EXISTS versiones_memorias_series (
+            version INTEGER PRIMARY KEY AUTOINCREMENT,
+            serie_id TEXT NOT NULL,
+            ficha TEXT NOT NULL,
+            fecha_actualizacion TEXT NOT NULL
+        )""")
         con.commit()
     if os.name == "posix":
         try:
@@ -245,6 +286,38 @@ def inicializar(db=DEFAULT_DB):
         except OSError:
             pass
     return db
+
+
+def guardar_biblia_serie(serie_id, biblia, db=DEFAULT_DB):
+    """Guardar SOLO la ficha que el editor entregó explícitamente."""
+    contexto = normalizar_contexto({"modo": "serie", "serie_id": serie_id,
+                                    "biblia": biblia})
+    db = inicializar(db)
+    ficha = json.dumps(contexto["biblia"], ensure_ascii=False)
+    fecha = datetime.now(timezone.utc).isoformat()
+    with closing(sqlite3.connect(str(db), timeout=15)) as con:
+        con.execute(
+            "INSERT INTO versiones_memorias_series "
+            "(serie_id,ficha,fecha_actualizacion) VALUES (?,?,?)",
+            (serie_id, ficha, fecha))
+        con.execute(
+            "INSERT OR REPLACE INTO memorias_series "
+            "(serie_id,ficha,fecha_actualizacion) VALUES (?,?,?)",
+            (serie_id, ficha, fecha))
+        con.commit()
+    return contexto["biblia"]
+
+
+def leer_biblia_serie(serie_id, db=DEFAULT_DB):
+    """La búsqueda exige ID exacto; no hay coincidencias por tema o personaje."""
+    if (not isinstance(serie_id, str) or
+            not re.fullmatch(r"[a-zA-Z0-9_-]{1,64}", serie_id)):
+        return None
+    db = inicializar(db)
+    with closing(sqlite3.connect(str(db), timeout=15)) as con:
+        row = con.execute("SELECT ficha FROM memorias_series WHERE serie_id=?",
+                          (serie_id,)).fetchone()
+    return json.loads(row[0]) if row else None
 
 
 def guardar_generacion(resultado, db=DEFAULT_DB):
@@ -289,3 +362,4 @@ def abrir_generacion(ident, db=DEFAULT_DB):
             "SELECT datos FROM generaciones WHERE id=?", (ident,)
         ).fetchone()
     return json.loads(row[0]) if row else None
+
