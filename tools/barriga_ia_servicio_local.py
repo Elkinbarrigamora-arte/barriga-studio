@@ -38,7 +38,7 @@ def ejecutar_motor(idea, modelo, duracion=35):
     validar_solicitud(idea, duracion)
     inicio = time.monotonic()
     idea = idea.strip()
-    prompt = preparar_solicitud(idea, "leyendas", "ficcion", duracion=duracion)
+    prompt = preparar_solicitud(idea, "ficcion", "ficcion", duracion=duracion)
     prompt += (
         "\nPREMISA INMUTABLE DEL AUTOR: " + json.dumps(idea, ensure_ascii=False)
         + "\nEl conflicto, objeto central, personajes definidos y pistas "
