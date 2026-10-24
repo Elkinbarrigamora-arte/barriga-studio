@@ -39,7 +39,25 @@ def normalizar(texto):
 
 
 def _canon(palabra):
-    return NUMEROS.get(palabra, palabra)
+    """Normalizar variantes ortográficas frecuentes sin cambiar parentescos."""
+    numero = NUMEROS.get(palabra)
+    if numero is not None:
+        return numero
+    if palabra.startswith(("desaparec", "desapareci")):
+        return "desaparecer"
+    if palabra.startswith(("escrib", "escrit")):
+        return "escribir"
+    return palabra
+
+
+# No exigir estos términos literalmente: son formas de presentar la acción,
+# no entidades ni hechos comprobables de una premisa. Los anclajes específicos
+# (carta, ayer, relación familiar, duración) se verifican por separado.
+FORMAS_FLEXIBLES = {
+    "hombre", "recibe", "recibio", "recibir", "seguir", "sigue",
+    "pistas", "pista", "descubre", "descubrio", "descubrir",
+    "verdad", "inesperada", "inesperado",
+}
 
 
 
@@ -114,15 +132,19 @@ def auditar_fidelidad(idea, guion):
     desarrollo = set(normalizar(historia + " " + cierre))
     conjunto = set(relato)
     palabras_clave = list(dict.fromkeys(
-        _canon(p) for p in original if len(p) >= 4 and p not in VACIAS
+        _canon(p) for p in original
+        if len(p) >= 4 and p not in VACIAS and p not in FORMAS_FLEXIBLES
     ))
     problemas = []
+    # Comparar en el mismo espacio normalizado: veinte == 20,
+    # escribió == escrita y desapareció == desaparecido.
+    conceptos_presentes = {_canon(p) for p in relato}
     if palabras_clave:
-        presentes = [_canon(p) for p in palabras_clave if _canon(p) in conjunto]
-        # No tratar puntuación/estilo como error; comprobar conceptos anclados.
+        presentes = [p for p in palabras_clave if p in conceptos_presentes]
+        # No tratar estilo, flexión ni expresiones equivalentes como errores.
         minimo = min(len(palabras_clave), max(2, math.ceil(len(palabras_clave) * .55)))
         if len(presentes) < minimo:
-            faltantes = [p for p in palabras_clave if p not in conjunto]
+            faltantes = [p for p in palabras_clave if p not in conceptos_presentes]
             problemas.append(
                 "Premisa desviada: el guion omite conceptos esenciales: "
                 + ", ".join(faltantes[:7])
