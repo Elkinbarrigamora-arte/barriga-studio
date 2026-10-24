@@ -108,6 +108,7 @@ def _ejecutar_motor_impl(idea, modelo, duracion=35):
 
     informe = ensamblar_por_bloques(
         borrador, duracion=duracion, modelo=modelo, premisa=idea,
+        estrategia_gancho="reglas-primero",
         reutilizar_borrador=True)
     completo = informe.get("guion")
     if not isinstance(completo, dict):
