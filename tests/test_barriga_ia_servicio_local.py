@@ -532,7 +532,7 @@ class PuenteHTTPTest(unittest.TestCase):
     def test_borrador_rechazado_no_sustituye_guion_en_editor(self):
         # Aislar el callback que recibe el resultado: solo actualiza la vista.
         from puente_local import PANEL
-        carga = PANEL.split("function cargarGuion(data){", 1)[1].split(
+        carga = PANEL.split("function cargarGuion(data,origen='historial'){", 1)[1].split(
             "   usar.onclick=", 1)[0]
         self.assertIn("vista.textContent=generado", carga)
         self.assertIn("ultimoResultado=data", carga)
@@ -556,6 +556,24 @@ class PuenteHTTPTest(unittest.TestCase):
         self.assertIn("if(actual&&actual!==idea&&", accion)
         self.assertIn("!confirm(", accion)
         self.assertNotIn("fetch(", accion)
+
+    def test_indica_origen_e_id_de_cada_resultado_sin_confundir_historial(self):
+        from puente_local import PANEL
+        carga = PANEL.split("function cargarGuion(data,origen='historial'){", 1)[1].split(
+            "   usar.onclick=", 1)[0]
+        self.assertIn("REGISTRO RECUPERADO DEL HISTORIAL", carga)
+        self.assertIn("NUEVA GENERACIÓN", carga)
+        self.assertIn("data.id", carga)
+        self.assertIn("data.estado", carga)
+        generar = PANEL.split("   btn.onclick=async()=>{", 1)[1].split(
+            "   reparar.onclick=async()=>{", 1)[0]
+        self.assertIn("cargarGuion(data,'nueva')", generar)
+        self.assertIn("GENERACIÓN EN CURSO", generar)
+        self.assertIn("SIN GENERACIÓN NUEVA", generar)
+        self.assertIn("La vista previa es anterior", generar)
+        recuperar = PANEL.split("   recuperar.onclick=async()=>{", 1)[1]
+        self.assertIn("cargarGuion(data,'historial')", recuperar)
+        self.assertIn("estadoVista,vista", PANEL)
 
     def test_historial_privado_por_token(self):
         status, _ = self.pedir("/api/historial")
