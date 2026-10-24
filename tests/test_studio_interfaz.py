@@ -7,6 +7,7 @@ import re
 import shutil
 import subprocess
 import unittest
+import xml.etree.ElementTree as ET
 
 ROOT = Path(__file__).resolve().parents[1]
 INDEX = (ROOT / "index.html").read_text(encoding="utf-8")
@@ -65,6 +66,14 @@ class StudioVisualStructureTest(unittest.TestCase):
         self.assertIn("studio-project-menu", JS)
         self.assertIn("typeof activeId !==", JS)
         self.assertIn("if (script && script.value.trim() && !confirm", JS)
+
+    def test_ilustracion_vectorial_integrada_y_valida(self):
+        image = ROOT / "assets/banner-personajes.svg"
+        self.assertTrue(image.is_file())
+        root = ET.parse(image).getroot()
+        self.assertEqual(root.tag, "{http://www.w3.org/2000/svg}svg")
+        self.assertIn("banner-personajes.svg", CSS)
+        self.assertIn("No fue generado por Barriga IA", JS)
 
     def test_javascript_syntax_if_node_available(self):
         node = shutil.which("node")
