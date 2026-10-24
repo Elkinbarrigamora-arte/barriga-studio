@@ -8,6 +8,9 @@ on:
       - 'tools/barriga_ia_por_bloques.py'
       - 'tools/barriga_ia_recuperar.py'
       - 'tools/barriga_ia_continuar.py'
+      - 'tools/barriga_ia_servicio_local.py'
+      - 'tools/puente_local.py'
+      - 'tests/test_barriga_ia_servicio_local.py'
       - 'tests/test_barriga_ia_narrativa.py'
       - 'tests/test_barriga_ia_por_bloques.py'
       - 'tests/test_barriga_ia_recuperar.py'
@@ -37,3 +40,4 @@ jobs:
           python -m unittest discover -s tests -p 'test_barriga_ia_por_bloques.py' -v
           python -m unittest discover -s tests -p 'test_barriga_ia_recuperar.py' -v
           python -m unittest discover -s tests -p 'test_barriga_ia_continuar.py' -v
+          python -m unittest discover -s tests -p 'test_barriga_ia_servicio_local.py' -v
