@@ -4,6 +4,7 @@ import argparse
 import json
 import sqlite3
 import secrets
+import threading
 import time
 import webbrowser
 from pathlib import Path
@@ -184,6 +185,7 @@ def guion(idea, modelo, db):
 
 def servidor(studio, token, puerto, modelo, db):
     origin = f"http://{HOST}:{puerto}"
+    generacion_libre = threading.BoundedSemaphore(value=1)
     class Handler(BaseHTTPRequestHandler):
         def send(self, status, body, content_type="application/json; charset=utf-8"):
             data = (body if isinstance(body, str) else
@@ -258,7 +260,18 @@ def servidor(studio, token, puerto, modelo, db):
                 idea = args.get("idea", "")
                 if not isinstance(idea, str) or not 2 <= len(idea.strip()) <= 2400:
                     return self.send(400, {"error": "Escribe una idea entre 2 y 2400 caracteres"})
-                self.send(200, guion(idea.strip(), modelo, db))
+                # Un único trabajo de inferencia evita saturar la GPU y
+                # ejecutar generaciones duplicadas simultáneamente.
+                if not generacion_libre.acquire(blocking=False):
+                    return self.send(429, {
+                        "error": "Barriga IA ya está generando otro guion. "
+                                 "Espera a que termine antes de iniciar uno nuevo."
+                    })
+                try:
+                    resultado = guion(idea.strip(), modelo, db)
+                finally:
+                    generacion_libre.release()
+                self.send(200, resultado)
             except ErrorNarrativa as exc:
                 # Si Ollama local falla, no confundirlo con un error del editor.
                 if any(x in str(exc).casefold() for x in (
