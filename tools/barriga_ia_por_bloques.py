@@ -619,6 +619,34 @@ def condensar_cierre_sin_cortar(texto, original, generado, limites,
     minimo, maximo = limites["cierre"]
     if not isinstance(texto, str) or not maximo < contar_palabras(texto) <= maximo * 4:
         return None
+    # Rescate conservador de una sola oración 1-2 palabras demasiado
+    # larga: quitar SOLO intensificadores opcionales. Si no se alcanza
+    # el límite exacto, no se modifica ni se acepta la oración.
+    if maximo < contar_palabras(texto) <= maximo + 2:
+        limpio = texto.strip()
+        if ('"' not in limpio and "'" not in limpio
+                and "«" not in limpio and "»" not in limpio
+                and re.search(r"[.!?…]$", limpio)
+                and len(re.split(r"(?<=[.!?…])\\s+", limpio)) == 1):
+            candidato = limpio
+            for _ in range(2):
+                candidato, cambiados = re.subn(
+                    r"(?<=\\s)(?:realmente|simplemente|"
+                    r"verdaderamente|absolutamente)\\s+",
+                    "", candidato, count=1, flags=re.IGNORECASE)
+                if not cambiados:
+                    break
+                if minimo <= contar_palabras(candidato) <= maximo:
+                    if (not detectar_problemas_editoriales(
+                            candidato, original, "cierre")
+                            and not verificar_continuidad_entre_bloques(
+                                "cierre", candidato, generado)
+                            and not any(
+                                normalizar_comparacion(candidato)
+                                == normalizar_comparacion(otro)
+                                for otro in rechazados
+                                if isinstance(otro, str))):
+                        return candidato
     frases = [x.strip() for x in re.split(
         r"(?<=[.!?…])\s+(?=[¡¿“\"A-ZÁÉÍÓÚÑ])", texto.strip()) if x.strip()]
     if not 2 <= len(frases) <= 8:
