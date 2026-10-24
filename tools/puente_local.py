@@ -2,6 +2,7 @@
 """Puente privado de prueba entre el Studio local y Ollama. No edita archivos existentes."""
 import argparse
 import json
+import sqlite3
 import secrets
 import time
 import webbrowser
@@ -10,6 +11,11 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlsplit
 from urllib.request import Request, urlopen
 from urllib.error import HTTPError, URLError
+from barriga_ia_narrativa import ErrorNarrativa
+from barriga_ia_servicio_local import (
+    ejecutar_motor, guardar_generacion, listar_generaciones,
+    abrir_generacion, inicializar,
+)
 
 HOST = "127.0.0.1"
 OLLAMA = "http://127.0.0.1:11434/api/generate"
@@ -18,75 +24,119 @@ PANEL = r'''
 <script>
 (()=>{
  const token=__TOKEN__;
+ const cabeceras={'X-Barriga-Token':token};
+ let ultima=null;
  function iniciar(){
    const field=document.getElementById('script');
    if(!field)return;
    const box=document.createElement('div');
    box.style.cssText='padding:14px;margin:12px 0;border:1px solid #ab90ff;border-radius:12px;background:#14122c';
    const title=document.createElement('strong');
-   title.textContent='🧠 BARRIGA IA · Guionista local';
+   title.textContent='🧠 BARRIGA IA · Guionista local verificado';
    const btn=document.createElement('button');
    btn.type='button';btn.className='button';btn.style.margin='10px';
-   btn.textContent='Completar guion con Barriga IA';
+   btn.textContent='Generar y validar guion';
    const msg=document.createElement('p');msg.className='muted';msg.setAttribute('role','status');
-   msg.textContent='Usa Ollama en tu Mac. No requiere servicios de pago.';
+   msg.textContent='Motor narrativo local por bloques. Requiere Ollama encendido.';
+   const historial=document.createElement('select');
+   historial.setAttribute('aria-label','Generaciones locales guardadas');
+   const recuperar=document.createElement('button');
+   recuperar.type='button';recuperar.className='button ghost';recuperar.style.margin='8px';
+   recuperar.textContent='Recuperar guion';
+   function cargarGuion(data){
+      const guion=data.guion||{};
+      const partes=['GANCHO',guion.gancho||'','', 'HISTORIA',guion.historia||'',
+                    '', 'CIERRE',guion.cierre||''];
+      field.value=partes.join('\n');
+      field.dispatchEvent(new Event('input',{bubbles:true}));
+      ultima=data.id;
+      const msgEstado=data.apto_para_revision_humana ?
+        'APTO PARA REVISION HUMANA (no publicado).' :
+        'BORRADOR RECHAZADO O INCOMPLETO; revisar antes de utilizar.';
+      msg.textContent=msgEstado+' ID: '+data.id+'. Estado: '+data.estado+'.';
+   }
+   async function refrescar(){
+      const resp=await fetch('/api/historial',{headers:cabeceras});
+      if(!resp.ok)throw Error('No se pudo consultar el historial');
+      const data=await resp.json();
+      historial.replaceChildren();
+      for(const row of data.generaciones){
+         const op=document.createElement('option');
+         op.value=row.id;
+         op.textContent=row.titulo+' · '+row.estado+' · '+row.fecha;
+         historial.append(op);
+      }
+      if(ultima)historial.value=ultima;
+   }
    btn.onclick=async()=>{
-     const idea=field.value.trim()||(document.getElementById('name')?.value.trim()||'');
-     if(!idea){msg.textContent='Primero escribe una idea o un nombre para tu historia.';return}
-     if(field.value.trim()&&!confirm('¿Reemplazar el guion actual? Guarda una copia si necesitas conservarlo.'))return;
-     btn.disabled=true;msg.textContent='Barriga IA está creando un guion real...';
-     try{
-       const resp=await fetch('/api/guion',{method:'POST',headers:{
-         'Content-Type':'application/json','X-Barriga-Token':token},
-         body:JSON.stringify({idea})});
-       const data=await resp.json();
-       if(!resp.ok)throw Error(data.error||('Error HTTP '+resp.status));
-       field.value='GANCHO\n'+data.gancho+'\n\nHISTORIA\n'+data.historia+
-                   '\n\nOFERTA O CIERRE\n'+data.oferta_cierre;
-       field.dispatchEvent(new Event('input', { bubbles:true }));
-       msg.textContent='Guion generado por '+data.modelo+' en '+data.segundos+
-         ' segundos. Revísalo antes de guardarlo.';
-     }catch(error){msg.textContent='No se pudo generar: '+error.message}
-     finally{btn.disabled=false}
+      const idea=field.value.trim()||(document.getElementById('name')?.value.trim()||'');
+      if(!idea){msg.textContent='Primero escribe una idea o un nombre.';return}
+      if(field.value.trim()&&!confirm('¿Reemplazar lo que hay en el editor? Guarda el proyecto antes.'))return;
+      btn.disabled=true;msg.textContent='Ollama está generando y revisando los tres bloques...';
+      try{
+         const resp=await fetch('/api/guion',{method:'POST',headers:{
+              ...cabeceras,'Content-Type':'application/json'},
+              body:JSON.stringify({idea})});
+         const data=await resp.json();
+         if(!resp.ok)throw Error(data.error||('Error HTTP '+resp.status));
+         cargarGuion(data);
+         await refrescar();
+      }catch(e){msg.textContent='Error: '+e.message}
+      finally{btn.disabled=false}
    };
-   box.append(title,document.createElement('br'),btn,msg);
+   recuperar.onclick=async()=>{
+      const id=historial.value;
+      if(!id)return;
+      if(field.value.trim()&&!confirm('¿Cargar esta versión guardada? El texto sin guardar será reemplazado.'))return;
+      try{
+        const resp=await fetch('/api/guion/'+encodeURIComponent(id),{headers:cabeceras});
+        const data=await resp.json();
+        if(!resp.ok)throw Error(data.error||'No encontrada');
+        cargarGuion(data);
+      }catch(e){msg.textContent='No se pudo recuperar: '+e.message}
+   };
+   box.append(title,document.createElement('br'),btn,msg,historial,recuperar);
    field.parentElement.appendChild(box);
+   refrescar().catch(e=>{msg.textContent='Historial no disponible: '+e.message});
  }
  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',iniciar);
  else iniciar();
 })();
 </script>
 '''
-def guion(idea, modelo):
-    prompt = (
-        "Eres guionista cinematográfico de Barriga Studio. Devuelve SOLAMENTE "
-        "un objeto JSON válido con tres campos de texto: gancho, historia y oferta_cierre. "
-        "Escribe un guion original para video de 30 a 40 segundos, total aproximado "
-        "de 75 a 95 palabras. Gancho de 0 a 4 segundos, historia de 4 a 32, "
-        "oferta o cierre narrativo de 32 a 40. "
-        "No interrumpas la historia para dirigirte al espectador. "
-        "Respeta continuidad de personajes y causas. No presentes ficción como hechos. "
-        "Idea del usuario: " + idea)
-    payload = json.dumps({"model": modelo, "prompt": prompt, "stream": False,
-                          "format": "json", "options": {"temperature": 0.7,
-                          "num_predict": 550}}).encode("utf-8")
-    request = Request(OLLAMA, data=payload, method="POST",
-                      headers={"Content-Type": "application/json"})
-    started = time.monotonic()
-    try:
-        with urlopen(request, timeout=180) as response:
-            answer = json.loads(json.load(response).get("response", ""))
-    except (HTTPError, URLError, TimeoutError, OSError, ValueError, TypeError) as exc:
-        raise RuntimeError("Ollama local no respondió con un guion JSON válido: " +
-                           type(exc).__name__) from exc
-    keys = ("gancho", "historia", "oferta_cierre")
-    if not isinstance(answer, dict) or any(not isinstance(answer.get(k), str) or
-                                           not answer[k].strip() for k in keys):
-        raise RuntimeError("El modelo no generó las tres partes del guion")
-    return {k: answer[k].strip() for k in keys} | {
-        "modelo": modelo, "segundos": round(time.monotonic()-started, 1)}
 
-def servidor(studio, token, puerto, modelo):
+
+def presentar_generacion(resultado, ident):
+    guion = resultado.get("guion") or {}
+    return {
+        "id": ident,
+        "gancho": guion.get("gancho", ""),
+        "historia": guion.get("historia", ""),
+        "oferta_cierre": guion.get("cierre", ""),
+        "guion": {
+            "titulo": guion.get("titulo", ""),
+            "gancho": guion.get("gancho", ""),
+            "historia": guion.get("historia", ""),
+            "cierre": guion.get("cierre", ""),
+        },
+        "estado": resultado.get("estado", "INCOMPLETO"),
+        "apto_para_revision_humana": resultado.get(
+            "apto_para_revision_humana", False),
+        "aprobacion_humana": False,
+        "publicacion_automatica_autorizada": False,
+        "modelo": resultado.get("modelo", ""),
+        "segundos": resultado.get("segundos_inferencia", 0),
+    }
+
+
+def guion(idea, modelo, db):
+    """Una única ruta de narrativa por bloques + informe persistente."""
+    resultado = ejecutar_motor(idea, modelo=modelo)
+    ident = guardar_generacion(resultado, db=db)
+    return presentar_generacion(resultado, ident)
+
+
+def servidor(studio, token, puerto, modelo, db):
     origin = f"http://{HOST}:{puerto}"
     class Handler(BaseHTTPRequestHandler):
         def send(self, status, body, content_type="application/json; charset=utf-8"):
@@ -127,7 +177,19 @@ def servidor(studio, token, puerto, modelo):
             elif route == "/api/health":
                 self.send(200, {"servidor": "OK", "modelo_solicitado": modelo,
                                 "inferencia_real_comprobada": False,
+                                "motor_narrativo_por_bloques": True,
+                                "almacenamiento_local": True,
                                 "video_neuronal_comprobado": False})
+            elif route == "/api/historial" or route.startswith("/api/guion/"):
+                if self.headers.get("X-Barriga-Token") != token:
+                    return self.send(403, {"error": "Token no autorizado"})
+                if route == "/api/historial":
+                    return self.send(200, {"generaciones": listar_generaciones(db)})
+                ident = route[len("/api/guion/"):]
+                item = abrir_generacion(ident, db)
+                if item is None:
+                    return self.send(404, {"error": "Generación no encontrada"})
+                return self.send(200, presentar_generacion(item, ident))
             else:
                 self.send(404, {"error": "Ruta desconocida"})
         def do_POST(self):
@@ -146,9 +208,11 @@ def servidor(studio, token, puerto, modelo):
                 idea = args.get("idea", "")
                 if not isinstance(idea, str) or not 2 <= len(idea.strip()) <= 2400:
                     return self.send(400, {"error": "Escribe una idea entre 2 y 2400 caracteres"})
-                self.send(200, guion(idea.strip(), modelo))
-            except (ValueError, TypeError):
-                self.send(400, {"error": "Solicitud inválida"})
+                self.send(200, guion(idea.strip(), modelo, db))
+            except (ValueError, TypeError, ErrorNarrativa) as exc:
+                return self.send(400, {"error": str(exc)[:180]})
+            except (sqlite3.Error, OSError):
+                return self.send(500, {"error": "Error guardando la generación local"})
             except RuntimeError as exc:
                 self.send(502, {"error": str(exc)})
     return Handler
@@ -165,8 +229,9 @@ def main():
         parser.error("No se encontró index.html en "+str(carpeta))
     if not 1024 <= args.puerto <= 65535:
         parser.error("Puerto inválido")
+    db = inicializar(carpeta / "local-data" / "guiones-locales.sqlite3")
     with ThreadingHTTPServer((HOST,args.puerto),servidor(carpeta,
-             secrets.token_urlsafe(32),args.puerto,args.modelo)) as http:
+             secrets.token_urlsafe(32),args.puerto,args.modelo,db)) as http:
         url=f"http://{HOST}:{args.puerto}/"
         print("Barriga Studio + IA: "+url,flush=True)
         print("Solo se escucha en 127.0.0.1; la versión original no se modifica.",flush=True)
