@@ -16,6 +16,7 @@ from barriga_ia_fidelidad import auditar_fidelidad
 from barriga_ia_servicio_local import (
     abrir_generacion, ejecutar_motor, guardar_generacion,
     inicializar, listar_generaciones, validar_solicitud, reanudar_cierre,
+    guardar_biblia_serie,
 )
 from puente_local import servidor, presentar_generacion
 
@@ -633,13 +634,59 @@ class PuenteHTTPTest(unittest.TestCase):
         generar = PANEL.split("   async function generarDesdePremisa(idea){", 1)[1].split(
             "   btn.onclick=async()=>{", 1)[0]
         self.assertIn("idea.length>500", generar)
-        self.assertIn("body:JSON.stringify({idea,duracion_objetivo_segundos:duracion})", generar)
+        self.assertIn("body:JSON.stringify({idea,duracion_objetivo_segundos:duracion,contexto})", generar)
+        self.assertIn("const contexto={modo:modo.value,video:", generar)
         self.assertIn("cargarGuion(data,'nueva')", generar)
         self.assertNotIn("field.value=", generar)
         normal = PANEL.split("   btn.onclick=async()=>{", 1)[1].split(
             "   rehacer.onclick=async()=>{", 1)[0]
         self.assertIn("El campo contiene un guion completo", normal)
         self.assertIn("await generarDesdePremisa(idea)", normal)
+
+    def test_serie_tiene_memoria_explicita_y_ruta_privada(self):
+        origin = "http://127.0.0.1:{}".format(self.port)
+        ficha = {"descripcion": "Pepito usa sombrero rojo; Pepita viste azul."}
+        status, _ = self.pedir("/api/serie", "POST",
+                               {"serie_id": "pepito-pepita", "biblia": ficha})
+        self.assertEqual(status, 403)
+        status, cuerpo = self.pedir("/api/serie", "POST",
+                                   {"serie_id": "pepito-pepita", "biblia": ficha},
+                                   "clave-prueba", origin)
+        self.assertEqual(status, 200, cuerpo)
+        self.assertTrue(json.loads(cuerpo)["guardada"])
+        status, _ = self.pedir("/api/serie/pepito-pepita")
+        self.assertEqual(status, 403)
+        status, cuerpo = self.pedir("/api/serie/pepito-pepita",
+                                   token="clave-prueba")
+        self.assertEqual(status, 200)
+        self.assertEqual(json.loads(cuerpo)["biblia"], ficha)
+        status, _ = self.pedir("/api/serie/otra", token="clave-prueba")
+        self.assertEqual(status, 404)
+
+    def test_serie_no_existente_se_rechaza_antes_de_ollama(self):
+        origin = "http://127.0.0.1:{}".format(self.port)
+        with patch("puente_local.ejecutar_motor") as motor:
+            status, cuerpo = self.pedir("/api/guion", "POST",
+                                        {"idea": "Pepita encuentra una llave",
+                                         "contexto": {"modo": "serie",
+                                                      "serie_id": "inventada"}},
+                                        "clave-prueba", origin)
+        self.assertEqual(status, 400, cuerpo)
+        motor.assert_not_called()
+
+    def test_solicitud_independiente_no_recibe_biblia_de_serie(self):
+        origin = "http://127.0.0.1:{}".format(self.port)
+        guardar_biblia_serie("pepito-pepita", {"descripcion": "Pepito"}, self.db)
+        with patch("puente_local.ejecutar_motor",
+                   return_value=resultado_mock()) as motor:
+            status, cuerpo = self.pedir(
+                "/api/guion", "POST",
+                {"idea": "Reel sobre un diamante",
+                 "contexto": {"modo": "independiente"}},
+                "clave-prueba", origin)
+        self.assertEqual(status, 200, cuerpo)
+        self.assertEqual(motor.call_args.kwargs["contexto"],
+                         {"modo": "independiente"})
 
     def test_historial_privado_por_token(self):
         status, _ = self.pedir("/api/historial")
@@ -809,3 +856,4 @@ class PuenteHTTPTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
