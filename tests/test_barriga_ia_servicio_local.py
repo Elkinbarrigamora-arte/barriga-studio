@@ -12,6 +12,7 @@ from urllib.request import Request, urlopen
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tools"))
 from barriga_ia_narrativa import ErrorNarrativa
+from barriga_ia_fidelidad import auditar_fidelidad
 from barriga_ia_servicio_local import (
     abrir_generacion, ejecutar_motor, guardar_generacion,
     inicializar, listar_generaciones, validar_solicitud,
@@ -25,7 +26,9 @@ def borrador():
         "nicho": "leyendas",
         "naturaleza": "ficcion",
         "gancho": "Daniel encontró una carta escrita ayer.",
-        "historia": "Daniel siguió las pistas hasta el faro abandonado.",
+        "historia": ("La carta decía que su hermano Mateo, desaparecido "
+                    "hace veinte años, seguía vivo. Daniel siguió "
+                    "las pistas hasta el faro abandonado."),
         "cierre": "Allí reconoció la voz de su hermano.",
         "personajes": [{"nombre": "Daniel"}, {"nombre": "Mateo"}],
         "continuidad": {},
@@ -68,7 +71,8 @@ class MotorUnificadoTest(unittest.TestCase):
                     "Una carta escrita ayer", "modelo-local", duracion=35)
         crear.assert_called_once()
         estructurar.assert_called_once_with(
-            draft, duracion=35, modelo="modelo-local")
+            draft, duracion=35, modelo="modelo-local",
+            premisa="Una carta escrita ayer")
         self.assertTrue(salida["apto_para_revision_humana"])
         self.assertFalse(salida["aprobacion_humana"])
         self.assertFalse(salida["publicacion_automatica_autorizada"])
@@ -86,6 +90,87 @@ class MotorUnificadoTest(unittest.TestCase):
         self.assertEqual(salida["guion"], draft)
         self.assertFalse(salida["guion_estructurado_completo"])
         self.assertFalse(salida["apto_para_revision_humana"])
+
+    def test_historia_del_rio_y_coco_se_rechaza_por_desvio(self):
+        idea = ("Un hombre recibe una carta escrita ayer por su hermano "
+                "desaparecido hace veinte años.")
+        cambiado = {
+            "gancho": ("En una pequeña aldea, un hermano desapareció después "
+                       "de ver un río misterioso. ¿Qué sucedió realmente?"),
+            "historia": (
+                "Daniel, el hermano mayor, había prometido a su hermano "
+                "menor, Miguel, que nunca cruzaría el río que corría a "
+                "través del bosque. Un día, Miguel ignoró la advertencia. "
+                "Años después, Daniel descubre una leyenda sobre un coco "
+                "en el río maldito."),
+            "cierre": (
+                "Al tocar el coco, Daniel ve a Miguel salir del río. "
+                "El amor de sus padres había roto la maldición."),
+        }
+        motivos = auditar_fidelidad(idea, cambiado)
+        self.assertTrue(any("ayer" in x for x in motivos))
+        self.assertTrue(any("carta" in x for x in motivos))
+        self.assertTrue(any("20 anos" in x for x in motivos))
+        self.assertTrue(any("Gancho interrogativo" in x for x in motivos))
+
+    def test_fidelidad_acepta_relato_que_conserva_hechos_de_premisa(self):
+        idea = ("Un hombre recibe una carta escrita ayer por su hermano "
+                "desaparecido hace veinte años.")
+        guion = borrador()
+        self.assertEqual(auditar_fidelidad(idea, guion), [])
+
+    def test_reintento_de_premisa_no_llama_ensamblador_si_ambos_fallan(self):
+        idea = ("Un hombre recibe una carta escrita ayer por su hermano "
+                "desaparecido hace veinte años.")
+        desviado = {
+            "titulo": "El río maldito", "nicho": "leyendas",
+            "naturaleza": "ficcion",
+            "gancho": "¡El coco cambió la vida de Daniel!",
+            "historia": "Daniel encontró un río encantado y quiso cruzarlo.",
+            "cierre": "Al final todo fue una maldición.",
+            "personajes": [], "continuidad": {}, "fuentes": [],
+            "duracion_objetivo_segundos": 35,
+        }
+        with patch("barriga_ia_servicio_local.generar_local",
+                   return_value=desviado) as crear:
+            with patch("barriga_ia_servicio_local.ensamblar_por_bloques") as ensamblar:
+                resultado = ejecutar_motor(idea, modelo="modelo-local")
+        self.assertEqual(crear.call_count, 2)
+        ensamblar.assert_not_called()
+        self.assertEqual(resultado["estado"], "PREMISA_DESVIADA")
+        self.assertFalse(resultado["apto_para_revision_humana"])
+        self.assertEqual(len(resultado["informe"]["intentos_borrador"]), 2)
+
+    def test_borrador_apto_no_rescata_desvio_en_ensamblaje(self):
+        idea = ("Un hombre recibe una carta escrita ayer por su hermano "
+                "desaparecido hace veinte años.")
+        desviado = dict(borrador(), gancho="El río se tragó a Miguel.",
+                        historia="Miguel entró al agua y encontró un coco.",
+                        cierre="El coco devolvió a Miguel sano y salvo.")
+        with patch("barriga_ia_servicio_local.generar_local",
+                   return_value=borrador()):
+            with patch("barriga_ia_servicio_local.ensamblar_por_bloques",
+                       return_value={
+                           "guion": desviado,
+                           "evaluacion": {"apto_para_revision_humana": True},
+                           "estado": "REVISION_HUMANA_PENDIENTE",
+                       }):
+                resultado = ejecutar_motor(idea, "modelo-local")
+        self.assertEqual(resultado["estado"], "PREMISA_DESVIADA")
+        self.assertFalse(resultado["apto_para_revision_humana"])
+        self.assertTrue(resultado["motivos_fidelidad"])
+
+    def test_rechazo_de_premisa_se_puede_guardar_y_recuperar(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Path(tmp) / "local-data" / "generaciones.sqlite3"
+            data = resultado_mock("PREMISA_DESVIADA")
+            data["motivos_fidelidad"] = ["Objeto omitido: carta"]
+            data["apto_para_revision_humana"] = False
+            ident = guardar_generacion(data, db)
+            result = abrir_generacion(ident, db)
+            self.assertEqual(result["estado"], "PREMISA_DESVIADA")
+            self.assertFalse(result["apto_para_revision_humana"])
+            self.assertTrue(result["motivos_fidelidad"])
 
     def test_persistencia_real_y_lectura_con_diferentes_conexiones(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -170,6 +255,19 @@ class PuenteHTTPTest(unittest.TestCase):
                          "El misterio de la carta")
         status, _ = self.pedir("/api/guion/" + ident, token="otro")
         self.assertEqual(status, 403)
+
+    def test_historial_puede_mostrar_motivo_de_premisa_desviada(self):
+        data = resultado_mock("PREMISA_DESVIADA")
+        data["motivos_fidelidad"] = ["Pista temporal omitida: ayer"]
+        data["apto_para_revision_humana"] = False
+        ident = guardar_generacion(data, self.db)
+        status, body = self.pedir("/api/guion/" + ident, token="clave-prueba")
+        self.assertEqual(status, 200)
+        recibido = json.loads(body)
+        self.assertEqual(recibido["estado"], "PREMISA_DESVIADA")
+        self.assertEqual(recibido["motivos_fidelidad"],
+                         ["Pista temporal omitida: ayer"])
+        self.assertFalse(recibido["apto_para_revision_humana"])
 
     def test_post_rechaza_peticion_sin_origen_y_clave(self):
         status, _ = self.pedir("/api/guion", "POST",
