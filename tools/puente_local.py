@@ -28,6 +28,7 @@ PANEL = r'''
  const cabeceras={'X-Barriga-Token':token};
  let ultima=null;
  let sePuedeReparar=false;
+ let ultimoResultado=null;
  function iniciar(){
    const field=document.getElementById('script');
    if(!field)return;
@@ -66,6 +67,13 @@ PANEL = r'''
    reparar.style.display='none';
    const msg=document.createElement('p');msg.className='muted';msg.setAttribute('role','status');
    msg.textContent='Escribe tu idea en Guion (arriba) y pulsa Generar. Requiere Ollama encendido.';
+   const vista=document.createElement('pre');
+   vista.setAttribute('aria-label','Vista previa del resultado, no sustituye el guion original');
+   vista.style.cssText='display:none;white-space:pre-wrap;overflow-wrap:anywhere;padding:12px;border:1px solid #555;border-radius:10px;max-height:350px;overflow:auto';
+   const usar=document.createElement('button');
+   usar.type='button';usar.className='button ghost';usar.style.margin='8px';
+   usar.textContent='Usar este resultado en el editor';
+   usar.style.display='none';
    const historial=document.createElement('select');
    historial.setAttribute('aria-label','Generaciones locales guardadas');
    const recuperar=document.createElement('button');
@@ -76,10 +84,12 @@ PANEL = r'''
       const partes=['GANCHO',guion.gancho||'','', 'HISTORIA',guion.historia||'',
                     '', 'CIERRE',guion.cierre||''];
       const generado=partes.join('\n');
-      field.dataset.ideaOriginal=String(data.idea||field.dataset.ideaOriginal||'').trim();
-      field.dataset.ultimoGuion=generado;
-      field.value=generado;
-      field.dispatchEvent(new Event('input',{bubbles:true}));
+      // No reemplazar el texto del usuario con un borrador rechazado.
+      // Todos los resultados se muestran primero en una vista de solo lectura.
+      ultimoResultado=data;
+      vista.textContent=generado;
+      vista.style.display='block';
+      usar.style.display='inline-block';
       ultima=data.id;
       sePuedeReparar=data.estado==='BLOQUE_RECHAZADO_CIERRE';
       reparar.style.display=sePuedeReparar?'inline-block':'none';
@@ -101,6 +111,27 @@ PANEL = r'''
         (motivos?'. Motivos: '+motivos:'')+
         (rechazos?'. Rechazo del bloque: '+rechazos:'')+'.'+detalle;
    }
+   usar.onclick=()=>{
+      if(!ultimoResultado)return;
+      const g=ultimoResultado.guion||{};
+      const partes=['GANCHO',g.gancho||'','', 'HISTORIA',g.historia||'',
+                    '', 'CIERRE',g.cierre||''];
+      const generado=partes.join('\n');
+      if(![g.gancho,g.historia,g.cierre].some(x=>typeof x==='string'&&x.trim())){
+         msg.textContent='El resultado no contiene texto aprovechable.';
+         return;
+      }
+      const aviso=ultimoResultado.apto_para_revision_humana?
+        '¿Reemplazar el editor con esta versión? Se conservará la idea original.':
+        'ATENCIÓN: esta versión fue rechazada o está incompleta. ¿Quieres usarla igualmente para editarla? Se conservará la idea original.';
+      if(!confirm(aviso))return;
+      const idea=String(ultimoResultado.idea||field.dataset.ideaOriginal||field.value).trim();
+      field.dataset.ideaOriginal=idea;
+      field.dataset.ultimoGuion=generado;
+      field.value=generado;
+      field.dispatchEvent(new Event('input',{bubbles:true}));
+      msg.textContent='Versión cargada para editar; la idea original se conserva en Restaurar idea original. Guarda tu proyecto si quieres conservar la edición.';
+   };
    async function refrescar(){
       const resp=await fetch('/api/historial',{headers:cabeceras});
       if(!resp.ok)throw Error('No se pudo consultar el historial');
@@ -159,7 +190,7 @@ PANEL = r'''
    recuperar.onclick=async()=>{
       const id=historial.value;
       if(!id)return;
-      if(field.value.trim()&&!confirm('¿Cargar esta versión guardada? El texto sin guardar será reemplazado.'))return;
+      // Recuperar muestra una vista previa sin modificar el editor.
       try{
         const resp=await fetch('/api/guion/'+encodeURIComponent(id),{headers:cabeceras});
         const data=await resp.json();
@@ -167,7 +198,7 @@ PANEL = r'''
         cargarGuion(data);
       }catch(e){msg.textContent='No se pudo recuperar: '+e.message}
    };
-   box.append(title,btn,reparar,restaurar,msg,historial,recuperar);
+   box.append(title,btn,reparar,restaurar,msg,vista,usar,historial,recuperar);
    field.parentElement.appendChild(box);
    refrescar().catch(e=>{msg.textContent='Historial no disponible: '+e.message});
  }
