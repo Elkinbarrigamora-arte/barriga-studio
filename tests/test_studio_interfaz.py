@@ -65,6 +65,14 @@ class StudioVisualStructureTest(unittest.TestCase):
         self.assertIn("No fue generado por Barriga IA", JS)
         self.assertIn("motor de generación de video real", JS)
 
+    def test_franja_de_beneficios_no_promete_video_neuronal(self):
+        self.assertIn("function installBenefits()", JS)
+        self.assertIn("studio-benefits", CSS)
+        self.assertIn("Proyectos locales", JS)
+        self.assertIn("Respaldo exportable", JS)
+        self.assertIn("Revisión editorial", JS)
+        self.assertNotIn("Video neuronal garantizado", JS)
+
     def test_project_filters_and_additive_metadata(self):
         for name in ("Todos", "En proceso", "Completados", "Favoritos",
                      "Buscar proyectos", "Nuevo proyecto", "Restaurar respaldo"):
