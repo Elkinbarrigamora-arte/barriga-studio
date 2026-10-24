@@ -38,7 +38,7 @@ class StudioVisualStructureTest(unittest.TestCase):
         self.assertNotIn("localStorage.removeItem(KEY)", JS)
 
     def test_four_columns_and_responsive_breakpoints(self):
-        self.assertRegex(CSS, r"27fr\\) minmax\\(0,40fr\\) minmax\\(0,16fr\\) minmax\\(0,17fr")
+        self.assertIn("grid-template-columns:minmax(0,27fr) minmax(0,40fr) minmax(0,16fr) minmax(0,17fr)", CSS)
         for bound in ("1070px", "680px"):
             self.assertIn(bound, CSS)
         for color in ("#030B20", "#08152E", "#FFD21A",
@@ -59,7 +59,7 @@ class StudioVisualStructureTest(unittest.TestCase):
 
     def test_project_filters_and_additive_metadata(self):
         for name in ("Todos", "En proceso", "Completados", "Favoritos",
-                     "Buscar proyectos", "Nuevo proyecto", "Recuperar"):
+                     "Buscar proyectos", "Nuevo proyecto", "Restaurar respaldo"):
             self.assertTrue(name in JS or name in MEJORAS, name)
         self.assertIn("barriga-studio-favorites-v1", JS)
         self.assertIn("studio-project-menu", JS)
