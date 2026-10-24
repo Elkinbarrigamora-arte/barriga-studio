@@ -200,6 +200,87 @@ class PruebasPorBloques(unittest.TestCase):
                 generar_texto_local("gancho corto", num_predict=75),
                 GANCHO_CORTO)
 
+    def test_ollama_json_incompleto_no_aceptado_aunque_done_stop(self):
+        class Respuesta:
+            def __enter__(self):
+                return self
+            def __exit__(self, *args):
+                return False
+            def read(self):
+                return json.dumps({
+                    "response": '{"texto":"Daniel encontró la carta pero',
+                    "done_reason": "stop", "eval_count": 80,
+                }).encode("utf-8")
+        with patch("barriga_ia_por_bloques.urlopen",
+                   return_value=Respuesta()):
+            with self.assertRaisesRegex(
+                    ErrorNarrativa, "OLLAMA_JSON_INVALIDO.*num_predict=420"):
+                generar_texto_local("historia", num_predict=420)
+
+    def test_ollama_limite_tokens_rechaza_incluso_json_valido(self):
+        class Respuesta:
+            def __enter__(self):
+                return self
+            def __exit__(self, *args):
+                return False
+            def read(self):
+                return json.dumps({
+                    "response": json.dumps({"texto": HISTORIA_CORTA}),
+                    "done_reason": "length", "eval_count": 420,
+                }).encode("utf-8")
+        with patch("barriga_ia_por_bloques.urlopen",
+                   return_value=Respuesta()):
+            with self.assertRaisesRegex(
+                    ErrorNarrativa, "OLLAMA_TRUNCADO_POR_LIMITE_TOKENS"):
+                generar_texto_local("historia", num_predict=420)
+
+    def test_historia_aumenta_presupuesto_y_preserva_gancho(self):
+        solicitudes = []
+        class Respuesta:
+            def __enter__(self):
+                return self
+            def __exit__(self, *args):
+                return False
+            def read(self):
+                return json.dumps({
+                    "response": '{"texto":"Daniel encontró una carta sin cerrar',
+                    "done_reason": "length", "eval_count": 420,
+                }).encode("utf-8")
+        def simular_llamada(request, timeout):
+            solicitudes.append(json.loads(request.data))
+            return Respuesta()
+        with patch("barriga_ia_por_bloques.urlopen",
+                   side_effect=simular_llamada):
+            salida = ensamblar_por_bloques(
+                original(), gancho_aprobado=GANCHO_CORTO)
+        self.assertEqual(salida["estado"], "BLOQUE_RECHAZADO_HISTORIA")
+        self.assertEqual(len(solicitudes), 2)
+        self.assertEqual(
+            [sol["options"]["num_predict"] for sol in solicitudes],
+            [420, 420])
+        self.assertEqual(salida["bloques_aprobados_en_longitud"]["gancho"], 6)
+        self.assertIsNone(salida["guion"])
+        self.assertTrue(any(
+            "OLLAMA_TRUNCADO_POR_LIMITE_TOKENS" in motivo
+            for motivo in salida["historial_bloques"][-1]["motivos_rechazo"]))
+
+    def test_ollama_json_completo_con_done_stop_funciona(self):
+        class Respuesta:
+            def __enter__(self):
+                return self
+            def __exit__(self, *args):
+                return False
+            def read(self):
+                return json.dumps({
+                    "response": json.dumps({"texto": HISTORIA_CORTA}),
+                    "done_reason": "stop", "eval_count": 135,
+                }).encode("utf-8")
+        with patch("barriga_ia_por_bloques.urlopen",
+                   return_value=Respuesta()):
+            self.assertEqual(
+                generar_texto_local("historia", num_predict=420),
+                HISTORIA_CORTA)
+
     def test_regresion_quinta_prueba_dos_ganchos_identicos_y_pepe(self):
         # Fallo observado en la Mac: Ollama repitió el mismo texto de 11 palabras.
         texto = "Daniel encontró una carta antigua en el viejo cajón de Pepe."
