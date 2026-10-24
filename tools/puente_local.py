@@ -33,19 +33,32 @@ PANEL = r'''
    box.style.cssText='padding:14px;margin:12px 0;border:1px solid #ab90ff;border-radius:12px;background:#14122c';
    const title=document.createElement('strong');
    title.textContent='🧠 BARRIGA IA · Guionista local verificado';
-   const ideaLabel=document.createElement('label');
-   ideaLabel.textContent='Idea original (se conserva sin cambios)';
-   ideaLabel.style.cssText='display:block;margin:10px 0 5px;font-weight:600';
-   const ideaInput=document.createElement('textarea');
-   ideaInput.rows=3;
-   ideaInput.placeholder='Escribe la premisa original de tu historia...';
-   ideaInput.style.cssText='display:block;width:100%;padding:10px;box-sizing:border-box;'+
-      'border:1px solid #8772bd;border-radius:8px;background:#201c3a;color:#fff';
+   // Solo un editor visible; preservamos la idea cuando se presenta el guion.
+   field.addEventListener('input',()=>{
+      if(field.value.trim()!==(field.dataset.ultimoGuion||'').trim()){
+         field.dataset.ideaOriginal=field.value.trim();
+         field.dataset.ultimoGuion='';
+      }
+   });
+   const restaurar=document.createElement('button');
+   restaurar.type='button';restaurar.className='button ghost';
+   restaurar.style.margin='8px';
+   restaurar.textContent='Restaurar idea original';
+   restaurar.onclick=()=>{
+      const original=(field.dataset.ideaOriginal||'').trim();
+      if(!original){msg.textContent='No hay una idea original guardada.';return}
+      if(field.value.trim()!==original &&
+         !confirm('¿Mostrar la idea original en el editor? Guarda los cambios antes.'))return;
+      field.value=original;
+      field.dataset.ultimoGuion='';
+      field.dispatchEvent(new Event('input',{bubbles:true}));
+      msg.textContent='Idea original restaurada en Guion. Puedes editarla o volver a generar.';
+   };
    const btn=document.createElement('button');
    btn.type='button';btn.className='button';btn.style.margin='10px';
    btn.textContent='Generar y validar guion';
    const msg=document.createElement('p');msg.className='muted';msg.setAttribute('role','status');
-   msg.textContent='Motor narrativo local por bloques. Requiere Ollama encendido.';
+   msg.textContent='Escribe tu idea en Guion (arriba) y pulsa Generar. Requiere Ollama encendido.';
    const historial=document.createElement('select');
    historial.setAttribute('aria-label','Generaciones locales guardadas');
    const recuperar=document.createElement('button');
@@ -55,10 +68,12 @@ PANEL = r'''
       const guion=data.guion||{};
       const partes=['GANCHO',guion.gancho||'','', 'HISTORIA',guion.historia||'',
                     '', 'CIERRE',guion.cierre||''];
-      field.value=partes.join('\n');
+      const generado=partes.join('\n');
+      field.dataset.ideaOriginal=String(data.idea||field.dataset.ideaOriginal||'').trim();
+      field.dataset.ultimoGuion=generado;
+      field.value=generado;
       field.dispatchEvent(new Event('input',{bubbles:true}));
       ultima=data.id;
-      if(data.idea)ideaInput.value=data.idea;
       const msgEstado=data.apto_para_revision_humana ?
         'APTO PARA REVISION HUMANA (no publicado).' :
         'BORRADOR RECHAZADO O INCOMPLETO; revisar antes de utilizar.';
@@ -81,9 +96,18 @@ PANEL = r'''
       if(ultima)historial.value=ultima;
    }
    btn.onclick=async()=>{
-      const idea=ideaInput.value.trim();
-      if(!idea){msg.textContent='Primero escribe la idea en el campo Idea original.';return}
-      if(field.value.trim()&&!confirm('¿Reemplazar lo que hay en el editor? Guarda el proyecto antes.'))return;
+      const texto=field.value.trim();
+      const generado=(field.dataset.ultimoGuion||'').trim();
+      const idea=(generado&&texto===generado)?
+        (field.dataset.ideaOriginal||'').trim():texto;
+      if(!idea){msg.textContent='Primero escribe la idea en el campo Guion.';return}
+      if(idea.length>2400){
+        msg.textContent='La idea no puede superar 2400 caracteres. Acórtala antes de generar.';
+        return;
+      }
+      if(generado&&texto===generado&&
+         !confirm('¿Generar otra versión desde la idea original? Se reemplazará el guion visible.'))return;
+      field.dataset.ideaOriginal=idea;
       btn.disabled=true;msg.textContent='Ollama está generando y revisando los tres bloques...';
       try{
          const resp=await fetch('/api/guion',{method:'POST',headers:{
@@ -107,7 +131,7 @@ PANEL = r'''
         cargarGuion(data);
       }catch(e){msg.textContent='No se pudo recuperar: '+e.message}
    };
-   box.append(title,ideaLabel,ideaInput,btn,msg,historial,recuperar);
+   box.append(title,btn,restaurar,msg,historial,recuperar);
    field.parentElement.appendChild(box);
    refrescar().catch(e=>{msg.textContent='Historial no disponible: '+e.message});
  }
