@@ -96,6 +96,23 @@ def estrategia(memoria_gib, libre_gib, arquitectura, chip=None):
     }
 
 
+def _modelos_ollama():
+    """Inventario de nombres instalados. No carga modelos ni ejecuta inferencia."""
+    if shutil.which("ollama") is None:
+        return []
+    listado = _command(["ollama", "list"], seconds=10)
+    resultado = []
+    for linea in listado.splitlines()[1:]:
+        partes = linea.split()
+        if not partes:
+            continue
+        nombre = partes[0]
+        # No incluir IDs, rutas ni otros metadatos privados del entorno.
+        if 1 <= len(nombre) <= 140 and re.fullmatch(r"[A-Za-z0-9_.:/-]+", nombre):
+            resultado.append(nombre)
+    return resultado
+
+
 def inventario():
     arquitectura = platform.machine()
     raw = _command(["sysctl", "-n", "hw.memsize"]) if platform.system() == "Darwin" else ""
@@ -117,6 +134,7 @@ def inventario():
         "mlx_instalado": mlx,
         "mlx_lm_instalado": mlx_lm,
         "ollama_cli_instalado": shutil.which("ollama") is not None,
+        "modelos_ollama_instalados": _modelos_ollama(),
         "estrategia": estrategia(memoria, free, arquitectura, chip),
         "salvaguardas": {
             "pesos_modificados": False,
