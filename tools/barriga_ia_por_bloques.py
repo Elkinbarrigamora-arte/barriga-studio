@@ -216,7 +216,7 @@ def proponer_gancho_seguro(original, limites, premisa=None):
         re.search(r"\bdesaparec\w*\b", base),
         re.search(r"\bcarta\b", base),
         re.search(r"\bayer\b", base),
-        re.search(r"\bescrib\w*\b|\bfechad[ao]\b", base),
+        re.search(r"\bescrib\w*\b|\bescrit[ao]s?\b|\bfechad[ao]s?\b", base),
     )
     if all(hechos_necesarios):
         candidato = "¡La carta de su hermano fue escrita ayer!"
