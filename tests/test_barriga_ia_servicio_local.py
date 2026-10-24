@@ -162,6 +162,40 @@ class MotorUnificadoTest(unittest.TestCase):
         }
         self.assertEqual(auditar_fidelidad(idea, historia), [])
 
+    def test_regresion_final_heroe_sin_resolver_carta(self):
+        idea = ("Un hombre recibe una carta escrita ayer por su hermano "
+                "desaparecido hace veinte años. Al seguir las pistas, "
+                "descubre una verdad inesperada.")
+        guion = {
+            "gancho": "Juan encuentra una carta antigua de su hermano desaparecido.",
+            "historia": (
+                "Después de años de búsqueda, Juan recibe una carta escrita "
+                "ayer por su hermano desaparecido hace veinte años. La carta "
+                "lo lleva a un antiguo pueblo donde su padre trabajaba. "
+                "Allí, descubre que su hermano está vivo, pero en una "
+                "situación peligrosa. Juan debe actuar rápido para salvarlo "
+                "de una organización criminal que lo está utilizando en "
+                "una trama oscura."),
+            "cierre": (
+                "Juan rescata a su hermano y descubre que él era el "
+                "verdadero héroe que siempre soñó ser."),
+        }
+        motivos = auditar_fidelidad(idea, guion)
+        self.assertTrue(any("Cierre genérico" in x for x in motivos), motivos)
+
+    def test_rechaza_conspiracion_como_revelacion_sin_detalle(self):
+        idea = ("Un hombre recibe una carta escrita ayer por su hermano "
+                "desaparecido hace veinte años.")
+        guion = {
+            "gancho": "Una carta escrita ayer desafió veinte años de silencio.",
+            "historia": (
+                "Juan leyó la carta de su hermano desaparecido hace veinte "
+                "años. Siguió las pistas de la carta hasta el pueblo."),
+            "cierre": "La familia era parte de una antigua conspiración.",
+        }
+        motivos = auditar_fidelidad(idea, guion)
+        self.assertTrue(any("Cierre genérico" in x for x in motivos), motivos)
+
     def test_no_confundir_una_esposa_desaparecida_con_el_hermano(self):
         idea = ("Un hombre recibe una carta escrita ayer por su hermano "
                 "desaparecido hace veinte años.")
