@@ -83,6 +83,11 @@ PANEL = r'''
    recuperarIdea.style.margin='8px';
    recuperarIdea.textContent='Recuperar idea original del registro';
    recuperarIdea.style.display='none';
+   const rehacer=document.createElement('button');
+   rehacer.type='button';rehacer.className='button ghost';
+   rehacer.style.margin='8px';
+   rehacer.textContent='Crear versión nueva desde la premisa guardada';
+   rehacer.style.display='none';
    const historial=document.createElement('select');
    historial.setAttribute('aria-label','Generaciones locales guardadas');
    const recuperar=document.createElement('button');
@@ -104,6 +109,7 @@ PANEL = r'''
       vista.style.display='block';
       usar.style.display='inline-block';
       recuperarIdea.style.display=typeof data.idea==='string'&&data.idea.trim()?'inline-block':'none';
+      rehacer.style.display=typeof data.idea==='string'&&data.idea.trim()&&!data.apto_para_revision_humana?'inline-block':'none';
       ultima=data.id;
       sePuedeReparar=data.estado==='BLOQUE_RECHAZADO_CIERRE';
       reparar.style.display=sePuedeReparar?'inline-block':'none';
@@ -172,27 +178,14 @@ PANEL = r'''
       }
       if(ultima)historial.value=ultima;
    }
-   btn.onclick=async()=>{
-      const texto=field.value.trim();
-      const generado=(field.dataset.ultimoGuion||'').trim();
-      const idea=(generado&&texto===generado)?
-        (field.dataset.ideaOriginal||'').trim():texto;
-      if(!idea){
-        msg.textContent='No se generó nada: el campo Guion está vacío. Recupera la idea original del historial o escribe una nueva.';
-        estadoVista.textContent='SIN GENERACIÓN NUEVA · El resultado visible es anterior.';
-        return;
+   async function generarDesdePremisa(idea){
+      if(btn.disabled)return;
+      if(typeof idea!=='string'||idea.trim().length<5||idea.length>500){
+         msg.textContent='No se inició una generación: la premisa debe tener entre 5 y 500 caracteres. Recupera la idea original, no el guion completo.';
+         estadoVista.textContent='SIN GENERACIÓN NUEVA · No se envió ninguna solicitud a Ollama.';
+         return;
       }
-      if(idea.length>2400){
-        msg.textContent='No se generó nada: la idea supera 2400 caracteres. Acórtala antes de generar.';
-        estadoVista.textContent='SIN GENERACIÓN NUEVA · El resultado visible es anterior.';
-        return;
-      }
-      if(generado&&texto===generado&&
-         !confirm('¿Generar otra versión desde la idea original? Se reemplazará el guion visible.'))return;
-      field.dataset.ideaOriginal=idea;
-      btn.disabled=true;
-      recuperar.disabled=true;
-      reparar.disabled=true;
+      btn.disabled=true;recuperar.disabled=true;reparar.disabled=true;rehacer.disabled=true;
       estadoVista.textContent='GENERACIÓN EN CURSO · Lo que se ve abajo es una versión anterior, NO el resultado nuevo.';
       msg.textContent='Ollama está generando y revisando los tres bloques...';
       try{
@@ -201,13 +194,44 @@ PANEL = r'''
               body:JSON.stringify({idea})});
          const data=await resp.json();
          if(!resp.ok)throw Error(data.error||('Error HTTP '+resp.status));
+         if(!data.id)throw Error('El servidor no devolvió identificador de generación');
          cargarGuion(data,'nueva');
-         await refrescar();
+         try{await refrescar()}catch(e){
+            msg.textContent+=' · El guion se guardó, pero no se actualizó el menú del historial: '+e.message;
+         }
       }catch(e){
          estadoVista.textContent='SIN GENERACIÓN NUEVA · Falló el intento. La vista previa es anterior.';
          msg.textContent='Error: '+e.message;
+      }finally{
+         btn.disabled=false;recuperar.disabled=false;reparar.disabled=false;rehacer.disabled=false;
       }
-      finally{btn.disabled=false;recuperar.disabled=false;reparar.disabled=false}
+   }
+   btn.onclick=async()=>{
+      const texto=field.value.trim();
+      const generado=(field.dataset.ultimoGuion||'').trim();
+      const idea=(generado&&texto===generado)?
+        (field.dataset.ideaOriginal||'').trim():texto;
+      if(!idea){
+         msg.textContent='No se generó nada: el campo Guion está vacío. Usa Crear versión nueva desde la premisa guardada en un registro recuperado.';
+         estadoVista.textContent='SIN GENERACIÓN NUEVA · No se envió ninguna solicitud a Ollama.';
+         return;
+      }
+      if(/\\bGANCHO\\b[\\s\\S]*\\bHISTORIA\\b[\\s\\S]*\\bCIERRE\\b/i.test(idea)){
+         msg.textContent='El campo contiene un guion completo, no una premisa. Recupera la idea original del registro antes de generar.';
+         estadoVista.textContent='SIN GENERACIÓN NUEVA · No se envió ninguna solicitud a Ollama.';
+         return;
+      }
+      if(generado&&texto===generado&&
+         !confirm('¿Generar otra versión desde la idea original? La vista previa cambiará; tu editor no se sustituirá.'))return;
+      field.dataset.ideaOriginal=idea;
+      await generarDesdePremisa(idea);
+   };
+   rehacer.onclick=async()=>{
+      const idea=ultimoResultado&&typeof ultimoResultado.idea==='string'?
+        ultimoResultado.idea.trim():'';
+      if(!idea){msg.textContent='El registro seleccionado no tiene una premisa recuperable.';return}
+      if(!confirm('¿Crear un nuevo guion a partir de la premisa guardada? Se conservarán el registro antiguo y el texto actual del editor.'))return;
+      await generarDesdePremisa(idea);
    };
    reparar.onclick=async()=>{
       if(!sePuedeReparar||!ultima)return;
@@ -241,7 +265,7 @@ PANEL = r'''
         cargarGuion(data,'historial');
       }catch(e){msg.textContent='No se pudo recuperar: '+e.message}
    };
-   box.append(title,btn,reparar,restaurar,msg,estadoVista,vista,usar,recuperarIdea,historial,recuperar);
+   box.append(title,btn,reparar,restaurar,msg,estadoVista,vista,usar,recuperarIdea,rehacer,historial,recuperar);
    field.parentElement.appendChild(box);
    refrescar().catch(e=>{msg.textContent='Historial no disponible: '+e.message});
  }
