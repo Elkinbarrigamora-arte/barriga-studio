@@ -1,0 +1,39 @@
+name: Pruebas Barriga IA calendario
+on:
+  pull_request:
+    paths:
+      - 'tools/barriga_ia_calendario.py'
+      - 'tests/test_barriga_ia_calendario.py'
+      - 'tools/barriga_ia_narrativa.py'
+      - 'tools/barriga_ia_por_bloques.py'
+      - 'tools/barriga_ia_recuperar.py'
+      - 'tools/barriga_ia_continuar.py'
+      - 'tests/test_barriga_ia_narrativa.py'
+      - 'tests/test_barriga_ia_por_bloques.py'
+      - 'tests/test_barriga_ia_recuperar.py'
+      - 'tests/test_barriga_ia_continuar.py'
+      - '.github/workflows/test-barriga-ia-calendario.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  calendario:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    strategy:
+      matrix:
+        python-version: ['3.9', '3.11']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Validar calendario y narrativa sin publicar
+        run: |
+          python -m unittest discover -s tests -p 'test_barriga_ia_calendario.py' -v
+          python -m unittest discover -s tests -p 'test_barriga_ia_narrativa.py' -v
+          python -m unittest discover -s tests -p 'test_barriga_ia_por_bloques.py' -v
+          python -m unittest discover -s tests -p 'test_barriga_ia_recuperar.py' -v
+          python -m unittest discover -s tests -p 'test_barriga_ia_continuar.py' -v
