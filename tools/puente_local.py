@@ -16,7 +16,9 @@ from barriga_ia_narrativa import ErrorNarrativa
 from barriga_ia_servicio_local import (
     ejecutar_motor, guardar_generacion, listar_generaciones,
     abrir_generacion, inicializar, reanudar_cierre,
+    guardar_biblia_serie, leer_biblia_serie,
 )
+from barriga_ia_contexto import normalizar_contexto
 
 HOST = "127.0.0.1"
 OLLAMA = "http://127.0.0.1:11434/api/generate"
@@ -36,6 +38,64 @@ PANEL = r'''
    box.style.cssText='padding:14px;margin:12px 0;border:1px solid #ab90ff;border-radius:12px;background:#14122c';
    const title=document.createElement('strong');
    title.textContent='🧠 BARRIGA IA · Guionista local verificado';
+    const modoLabel=document.createElement('label');
+    modoLabel.textContent='Tipo de Reel: ';
+    const modo=document.createElement('select');
+    modo.setAttribute('aria-label','Modo narrativo');
+    modo.add(new Option('Independiente (predeterminado)','independiente'));
+    modo.add(new Option('Continuar una serie','serie'));
+    modoLabel.append(modo);
+    const panelSerie=document.createElement('div');
+    panelSerie.style.cssText='display:none;padding:10px;border:1px solid #6e638f;border-radius:8px;margin:8px 0';
+    const serieId=document.createElement('input');
+    serieId.placeholder='ID de serie, ej. pepito-pepita';
+    serieId.maxLength=64;
+    serieId.setAttribute('aria-label','Identificador de serie');
+    const ficha=document.createElement('textarea');
+    ficha.placeholder='Personajes, relaciones, estilo, hechos aprobados y continuidad de esta serie';
+    ficha.maxLength=3000;
+    ficha.rows=3;
+    ficha.style.cssText='display:block;max-width:100%;width:100%;margin-top:8px';
+    ficha.setAttribute('aria-label','Biblia de continuidad escrita por el editor');
+    const guardarSerie=document.createElement('button');
+    guardarSerie.type='button';guardarSerie.className='button ghost';
+    guardarSerie.textContent='Guardar ficha de serie';
+    const cargarSerie=document.createElement('button');
+    cargarSerie.type='button';cargarSerie.className='button ghost';
+    cargarSerie.textContent='Cargar ficha';
+    const serieEstado=document.createElement('p');
+    serieEstado.className='muted';serieEstado.setAttribute('role','status');
+    serieEstado.textContent='Las series solo se usan si activas este modo.';
+    panelSerie.append(serieId,ficha,guardarSerie,cargarSerie,serieEstado);
+    modo.onchange=()=>{panelSerie.style.display=modo.value==='serie'?'block':'none'};
+    const validarId=()=>/^[a-zA-Z0-9_-]{1,64}$/.test(serieId.value.trim());
+    guardarSerie.onclick=async()=>{
+      if(!validarId()||!ficha.value.trim()){
+        serieEstado.textContent='Escribe un ID sin espacios y la ficha de continuidad.';
+        return;
+      }
+      if(!confirm('¿Guardar esta ficha de serie? Se conservará un historial local de versiones.'))return;
+      try{
+        const resp=await fetch('/api/serie',{method:'POST',headers:{
+          ...cabeceras,'Content-Type':'application/json'},
+          body:JSON.stringify({serie_id:serieId.value.trim(),
+                               biblia:{descripcion:ficha.value.trim()}})});
+        const data=await resp.json();
+        if(!resp.ok)throw Error(data.error||'No se guardó la ficha');
+        serieEstado.textContent='Ficha de '+data.serie_id+' guardada localmente.';
+      }catch(e){serieEstado.textContent='Error al guardar serie: '+e.message}
+    };
+    cargarSerie.onclick=async()=>{
+      if(!validarId()){serieEstado.textContent='Introduce un ID de serie válido.';return}
+      try{
+        const resp=await fetch('/api/serie/'+encodeURIComponent(serieId.value.trim()),
+                               {headers:cabeceras});
+        const data=await resp.json();
+        if(!resp.ok)throw Error(data.error||'No se encontró la serie');
+        ficha.value=String(data.biblia?.descripcion||'');
+        serieEstado.textContent='Ficha de '+data.serie_id+' recuperada.';
+      }catch(e){serieEstado.textContent='Error al cargar: '+e.message}
+    };
    // Solo un editor visible; preservamos la idea cuando se presenta el guion.
    field.addEventListener('input',()=>{
       if(field.value.trim()!==(field.dataset.ultimoGuion||'').trim()){
@@ -98,6 +158,7 @@ PANEL = r'''
         origen==='reparacion'?'NUEVA REPARACIÓN':'REGISTRO RECUPERADO DEL HISTORIAL';
       estadoVista.textContent=tipo+' · ID: '+(data.id||'no informado')+
         ' · Estado: '+(data.estado||'no informado')+
+         ' · Modo: '+(data.contexto_editorial?.modo||'independiente')+
         (Number.isInteger(data.duracion_objetivo_segundos)?
           ' · Duración objetivo: '+data.duracion_objetivo_segundos+' s':'');
       const guion=data.guion||{};
@@ -129,9 +190,10 @@ PANEL = r'''
          +(typeof perf.tokens_por_segundo==='number'?
            ' · '+perf.tokens_por_segundo+' tokens/s':''))
         :'';
-      msg.textContent=msgEstado+' ID: '+data.id+'. Estado: '+data.estado+
+       msg.textContent=msgEstado+' ID: '+data.id+'. Estado: '+data.estado+
         (motivos?'. Motivos: '+motivos:'')+
-        (rechazos?'. Rechazo del bloque: '+rechazos:'')+'.'+detalle;
+         (rechazos?'. Rechazo del bloque: '+rechazos:'')+'.'+detalle+
+         (data.plan_video?' · Plan audiovisual guardado; video no generado.':'');
    }
    usar.onclick=()=>{
       if(!ultimoResultado)return;
@@ -194,13 +256,27 @@ PANEL = r'''
          estadoVista.textContent='SIN GENERACIÓN NUEVA · Duración inválida.';
          return;
       }
+       const estilo=document.getElementById('style');
+       const voz=document.getElementById('voice');
+       const formato=document.getElementById('format');
+       const contexto={modo:modo.value,video:{
+         formato:String(formato?.value||'').includes('16:9')?'16:9':'9:16',
+         estilo_visual:String(estilo?.value||'cinematográfico'),
+         voz:String(voz?.value||'por definir')}};
+       if(modo.value==='serie'){
+         if(!validarId()){
+           msg.textContent='Para continuar una serie, escribe su identificador.';
+           return;
+         }
+         contexto.serie_id=serieId.value.trim();
+       }
       btn.disabled=true;recuperar.disabled=true;reparar.disabled=true;rehacer.disabled=true;
       estadoVista.textContent='GENERACIÓN EN CURSO · '+duracion+' s solicitados · El resultado inferior es anterior.';
       msg.textContent='Ollama está generando y revisando los tres bloques...';
       try{
          const resp=await fetch('/api/guion',{method:'POST',headers:{
               ...cabeceras,'Content-Type':'application/json'},
-              body:JSON.stringify({idea,duracion_objetivo_segundos:duracion})});
+               body:JSON.stringify({idea,duracion_objetivo_segundos:duracion,contexto})});
          const data=await resp.json();
          if(!resp.ok)throw Error(data.error||('Error HTTP '+resp.status));
          if(!data.id)throw Error('El servidor no devolvió identificador de generación');
@@ -274,7 +350,7 @@ PANEL = r'''
         cargarGuion(data,'historial');
       }catch(e){msg.textContent='No se pudo recuperar: '+e.message}
    };
-   box.append(title,btn,reparar,restaurar,msg,estadoVista,vista,usar,recuperarIdea,rehacer,historial,recuperar);
+    box.append(title,modoLabel,panelSerie,btn,reparar,restaurar,msg,estadoVista,vista,usar,recuperarIdea,rehacer,historial,recuperar);
    field.parentElement.appendChild(box);
    refrescar().catch(e=>{msg.textContent='Historial no disponible: '+e.message});
  }
@@ -326,12 +402,15 @@ def presentar_generacion(resultado, ident):
         "segundos": resultado.get("segundos_inferencia", 0),
         "rendimiento": resultado.get("rendimiento", {}),
         "reanudado_desde": resultado.get("reanudado_desde"),
+        "contexto_editorial": resultado.get("contexto_editorial", {"modo": "independiente"}),
+        "plan_video": resultado.get("plan_video"),
     }
 
 
-def guion(idea, modelo, db, duracion=35):
+def guion(idea, modelo, db, duracion=35, contexto=None):
     """Ruta única: conservar duración solicitada y persistir la generación."""
-    resultado = ejecutar_motor(idea, modelo=modelo, duracion=duracion)
+    opciones = {"contexto": contexto} if contexto is not None else {}
+    resultado = ejecutar_motor(idea, modelo=modelo, duracion=duracion, **opciones)
     ident = guardar_generacion(resultado, db=db)
     return presentar_generacion(resultado, ident)
 
@@ -383,6 +462,14 @@ def servidor(studio, token, puerto, modelo, db):
                                 "motor_narrativo_por_bloques": True,
                                 "almacenamiento_local": True,
                                 "video_neuronal_comprobado": False})
+            elif route.startswith("/api/serie/"):
+                if self.headers.get("X-Barriga-Token") != token:
+                    return self.send(403, {"error": "Token no autorizado"})
+                serie_id = route[len("/api/serie/"):]
+                ficha = leer_biblia_serie(serie_id, db)
+                if ficha is None:
+                    return self.send(404, {"error": "Serie no registrada"})
+                self.send(200, {"serie_id": serie_id, "biblia": ficha})
             elif route == "/api/historial" or route.startswith("/api/guion/"):
                 if self.headers.get("X-Barriga-Token") != token:
                     return self.send(403, {"error": "Token no autorizado"})
@@ -397,7 +484,8 @@ def servidor(studio, token, puerto, modelo, db):
                 self.send(404, {"error": "Ruta desconocida"})
         def do_POST(self):
             route = urlsplit(self.path).path
-            if route not in ("/api/guion", "/api/guion/reparar-cierre"):
+            if route not in ("/api/guion", "/api/guion/reparar-cierre",
+                             "/api/serie"):
                 return self.send(404, {"error": "Ruta desconocida"})
             if self.headers.get("Origin") != origin or \
                self.headers.get("X-Barriga-Token") != token:
@@ -411,6 +499,12 @@ def servidor(studio, token, puerto, modelo, db):
                 args = json.loads(self.rfile.read(size))
                 if not isinstance(args, dict):
                     return self.send(400, {"error": "La solicitud debe ser un objeto JSON"})
+                if route == "/api/serie":
+                    ficha = guardar_biblia_serie(args.get("serie_id"),
+                                                args.get("biblia"), db)
+                    return self.send(200, {"serie_id": args["serie_id"],
+                                           "biblia": ficha, "guardada": True})
+                contexto = None
                 if route == "/api/guion":
                     idea = args.get("idea", "")
                     if not isinstance(idea, str) or not 5 <= len(idea.strip()) <= 500:
@@ -418,6 +512,16 @@ def servidor(studio, token, puerto, modelo, db):
                     duracion = args.get("duracion_objetivo_segundos", 35)
                     if type(duracion) is not int or not 20 <= duracion <= 60:
                         return self.send(400, {"error": "La duración debe ser un entero de 20 a 60 segundos"})
+                    contexto = args.get("contexto")
+                    if isinstance(contexto, dict) and contexto.get("modo") == "serie":
+                        # La biblia se recupera por ID; nunca se infiere por tema.
+                        if "biblia" in contexto:
+                            return self.send(400, {"error": "Guarda la ficha de serie por separado"})
+                        biblia = leer_biblia_serie(contexto.get("serie_id"), db)
+                        if biblia is None:
+                            return self.send(400, {"error": "Serie no registrada: guarda su ficha primero"})
+                        contexto = dict(contexto, biblia=biblia)
+                    normalizar_contexto(contexto)
                 else:
                     ident = args.get("id", "")
                     if not isinstance(ident, str) or len(ident) != 23:
@@ -434,7 +538,8 @@ def servidor(studio, token, puerto, modelo, db):
                         reparado, nuevo_id = reanudar_cierre(ident, modelo, db)
                         resultado = presentar_generacion(reparado, nuevo_id)
                     else:
-                        resultado = guion(idea.strip(), modelo, db, duracion=duracion)
+                        resultado = guion(idea.strip(), modelo, db,
+                                          duracion=duracion, contexto=contexto)
                 finally:
                     generacion_libre.release()
                 self.send(200, resultado)
@@ -478,3 +583,4 @@ def main():
 
 if __name__=="__main__":
     main()
+
