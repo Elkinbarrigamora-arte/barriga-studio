@@ -627,12 +627,12 @@ def condensar_cierre_sin_cortar(texto, original, generado, limites,
         if ('"' not in limpio and "'" not in limpio
                 and "«" not in limpio and "»" not in limpio
                 and re.search(r"[.!?…]$", limpio)
-                and len(re.split(r"(?<=[.!?…])\\s+", limpio)) == 1):
+                and len(re.split(r"(?<=[.!?…])\s+", limpio)) == 1):
             candidato = limpio
             for _ in range(2):
                 candidato, cambiados = re.subn(
-                    r"(?<=\\s)(?:realmente|simplemente|"
-                    r"verdaderamente|absolutamente)\\s+",
+                    r"(?<=\s)(?:realmente|simplemente|"
+                    r"verdaderamente|absolutamente)\s+",
                     "", candidato, count=1, flags=re.IGNORECASE)
                 if not cambiados:
                     break
