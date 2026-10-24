@@ -747,7 +747,19 @@ def ensamblar_por_bloques(original, duracion=35, modelo=MODELO,
         aprobados.pop("historia", None)
         aprobados.pop("cierre", None)
     resultado["bloques_aprobados_en_longitud"] = {k: contar_palabras(v) for k, v in aprobados.items()}
-    if gancho_aprobado is None and "gancho" not in aprobados and estrategia_gancho == "reglas-primero":
+    # Conservar un gancho válido del borrador antes de intentar una regla.
+    # El ahorro determinista es un respaldo para ganchos inválidos, no una
+    # sustitución obligatoria de un gancho creativo ya apto.
+    gancho_borrador = original.get("gancho")
+    gancho_borrador_valido = (
+        reutilizar_borrador
+        and isinstance(gancho_borrador, str)
+        and limites["gancho"][0] <= contar_palabras(gancho_borrador) <= limites["gancho"][1]
+        and not detectar_problemas_editoriales(gancho_borrador, original, "gancho")
+    )
+    if (gancho_aprobado is None and "gancho" not in aprobados
+            and not gancho_borrador_valido
+            and estrategia_gancho == "reglas-primero"):
         alternativa = proponer_gancho_seguro(
             original, limites, premisa=premisa)
         if alternativa:
