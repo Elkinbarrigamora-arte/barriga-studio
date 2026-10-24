@@ -293,6 +293,9 @@ class PuenteHTTPTest(unittest.TestCase):
         status, pagina = self.pedir("/")
         self.assertEqual(status, 200)
         self.assertIn("Generar y validar guion", pagina)
+        self.assertIn("Idea original (se conserva sin cambios)", pagina)
+        self.assertIn("const idea=ideaInput.value.trim()", pagina)
+        self.assertNotIn("const idea=field.value.trim()", pagina)
         self.assertIn("clave-prueba", pagina)
         self.assertEqual((self.studio / "index.html").read_text(),
                          "<html><body>Studio</body></html>")
