@@ -53,7 +53,10 @@ PANEL = r'''
       const msgEstado=data.apto_para_revision_humana ?
         'APTO PARA REVISION HUMANA (no publicado).' :
         'BORRADOR RECHAZADO O INCOMPLETO; revisar antes de utilizar.';
-      msg.textContent=msgEstado+' ID: '+data.id+'. Estado: '+data.estado+'.';
+      const motivos=Array.isArray(data.motivos_fidelidad)?
+        data.motivos_fidelidad.join('; '):'';
+      msg.textContent=msgEstado+' ID: '+data.id+'. Estado: '+data.estado+
+        (motivos?'. Motivos: '+motivos:'')+'.';
    }
    async function refrescar(){
       const resp=await fetch('/api/historial',{headers:cabeceras});
@@ -120,6 +123,8 @@ def presentar_generacion(resultado, ident):
             "cierre": guion.get("cierre", ""),
         },
         "estado": resultado.get("estado", "INCOMPLETO"),
+        "idea": resultado.get("idea", ""),
+        "motivos_fidelidad": resultado.get("motivos_fidelidad", []),
         "apto_para_revision_humana": resultado.get(
             "apto_para_revision_humana", False),
         "aprobacion_humana": False,
