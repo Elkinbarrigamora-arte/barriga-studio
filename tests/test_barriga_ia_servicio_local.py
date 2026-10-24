@@ -121,6 +121,60 @@ class MotorUnificadoTest(unittest.TestCase):
         guion = borrador()
         self.assertEqual(auditar_fidelidad(idea, guion), [])
 
+    def test_regresion_intercambio_hermano_por_esposa(self):
+        """La nueva carta se conserva, pero no se puede cambiar al desaparecido."""
+        idea = ("Un hombre recibe una carta escrita ayer por su hermano "
+                "desaparecido hace veinte años. Al seguir las pistas, "
+                "descubre una verdad inesperada.")
+        guion = {
+            "gancho": "La carta de ayer contiene un misterio antiguo.",
+            "historia": (
+                "Juan, al leer la carta de su hermano Carlos escrita ayer, "
+                "se da cuenta de que su esposa Ana desapareció hace veinte "
+                "años. Visita el pueblo donde vivían y descubre que Carlos "
+                "fue acusado y encarcelado. Con la ayuda de Pedro, investiga "
+                "y encuentra pruebas de su inocencia. La verdadera culpable "
+                "es María, una vieja rival. Juan logra liberar a Carlos y "
+                "revelar la verdad a la comunidad."),
+            "cierre": (
+                "Juan revela la verdad a la comunidad, liberando a Carlos "
+                "y restableciendo la paz."),
+        }
+        motivos = auditar_fidelidad(idea, guion)
+        self.assertTrue(any("su hermano" in m for m in motivos), motivos)
+        self.assertTrue(any("repite acciones" in m for m in motivos), motivos)
+
+    def test_valida_un_hermano_desaparecido_sin_cambiar_personajes(self):
+        idea = ("Un hombre recibe una carta escrita ayer por su hermano "
+                "desaparecido hace veinte años.")
+        historia = {
+            "gancho": "La carta escrita ayer contenía la voz del pasado.",
+            "historia": (
+                "Daniel abrió la carta escrita ayer por su hermano Mateo, "
+                "desaparecido hace veinte años. El papel tenía una "
+                "fotografía de una estación abandonada. Daniel siguió "
+                "esa pista y reconoció una marca que ambos dibujaban "
+                "cuando eran niños."),
+            "cierre": (
+                "En la estación encontró a Mateo. La carta le había "
+                "permitido reencontrarlo."),
+        }
+        self.assertEqual(auditar_fidelidad(idea, historia), [])
+
+    def test_no_confundir_una_esposa_desaparecida_con_el_hermano(self):
+        idea = ("Un hombre recibe una carta escrita ayer por su hermano "
+                "desaparecido hace veinte años.")
+        historia = {
+            "gancho": "La carta de ayer reveló una pista estremecedora.",
+            "historia": (
+                "Su hermano Carlos escribió desde la prisión que "
+                "su esposa Ana había desaparecido hace veinte años. "
+                "La carta llevaba una fotografía de Ana."),
+            "cierre": "Al abrir la foto, vio a Ana junto al juez.",
+        }
+        motivos = auditar_fidelidad(idea, historia)
+        self.assertTrue(any("su hermano" in m for m in motivos), motivos)
+
     def test_reintento_de_premisa_no_llama_ensamblador_si_ambos_fallan(self):
         idea = ("Un hombre recibe una carta escrita ayer por su hermano "
                 "desaparecido hace veinte años.")
