@@ -27,11 +27,13 @@ ESQUEMA_TEXTO = {
 }
 
 
-def limites_de_bloques(duracion):
-    """Distribuir una narración a ~150 palabras/minuto y gancho de 2–3 s."""
+def limites_de_bloques(duracion, palabras_por_minuto=150):
+    """Presupuestos de palabras para una velocidad de locución configurable."""
     if type(duracion) is not int or not 20 <= duracion <= 60:
         raise ErrorNarrativa("Duración fuera de rango (20 a 60 segundos)")
-    total = round(duracion * 2.5)
+    if type(palabras_por_minuto) is not int or not 120 <= palabras_por_minuto <= 210:
+        raise ErrorNarrativa("Velocidad de narración: 120 a 210 ppm")
+    total = round(duracion * palabras_por_minuto / 60)
     cierre = round(total * 0.18)
     historia = total - 7 - cierre
     return {
@@ -82,6 +84,13 @@ def detectar_problemas_editoriales(texto, original, bloque, anterior=None):
             r"\bnoche anterior\b|\bv[ií]spera\b", texto.casefold()
         ):
             problemas.append("Se perdió la pista temporal esencial: ayer")
+    # Ollama puede llegar al límite de tokens en medio de una oración.
+    # La puntuación final no certifica coherencia semántica; sí evita cortes evidentes.
+    final = texto.strip().rstrip('”"’\')]}')
+    if not re.search(r"[.!?…]$", final):
+        problemas.append("Oración incompleta: no hay puntuación final")
+    if re.search(r"\b(\w+)(?:\s+\1){3,}\b", texto, re.IGNORECASE | re.UNICODE):
+        problemas.append("Repetición mecánica de palabras consecutivas")
     # Mantener únicos los avisos.
     return list(dict.fromkeys(problemas))
 
@@ -241,6 +250,24 @@ def prompt_para_bloque(nombre, original, generado, limites, anterior=None):
             "Ejemplo de estructura (no copies): " + ej + ". "
             "Solo JSON con el campo texto. Contexto: " + contexto_corto
         )
+    if anterior and nombre in ("historia", "cierre"):
+        # Reintento distinto: breve, con causa y efecto, y rechazo explícito.
+        return (
+            "PLAN ALTERNATIVO PARA {}: reescribe SOLO esta sección en español. "
+            "No copies el intento fallido. ENTRE {} Y {} PALABRAS exactas; "
+            "termina todas las oraciones con punto. Escribe acciones y "
+            "consecuencias en secuencia. No agregues protagonistas, fechas "
+            'ni desenlaces ajenos a la premisa. Responde solo {"texto":"..."}. '
+            "Diagnóstico: "
+        ).format(nombre.upper(), minimo, maximo) + json.dumps({
+            "motivos_del_rechazo": anterior.get("motivos_rechazo", []),
+            "texto_rechazado": anterior.get("texto", "")[:250],
+            "gancho_inmutable": generado.get("gancho"),
+            "historia_inmutable": generado.get("historia"),
+            "borrador_historia": original.get("historia", "")[:850],
+            "borrador_cierre": original.get("cierre", "")[:250],
+            "personajes_permitidos": original.get("personajes", []),
+        }, ensure_ascii=False)
     instruccion = (
         "ESCRIBE SOLO LA SECCION '{}' DE UNA HISTORIA PARA REEL. "
         "Debe contener ENTRE {} Y {} PALABRAS, ambas inclusive. "
@@ -283,10 +310,58 @@ def generar_texto_local(prompt, modelo=MODELO, timeout=150,
     return " ".join(texto.split())
 
 
+def leer_sesion_por_bloques(ruta):
+    """Leer el sexto informe fallido o un guion crudo sin sobrescribirlo."""
+    datos = json.loads(Path(ruta).read_text(encoding="utf-8"))
+    if not isinstance(datos, dict):
+        raise ErrorNarrativa("El archivo de entrada debe ser un objeto JSON")
+    sesion = datos if isinstance(datos.get("historial_bloques"), list) else None
+    if sesion is not None:
+        if not isinstance(datos.get("guion_original"), dict):
+            raise ErrorNarrativa("Informe sin guion_original: no se puede reanudar")
+        return datos["guion_original"], sesion
+    return leer_guion_guardado(ruta), None
+
+
+def recuperar_bloques_aprobados(sesion, original, limites):
+    """Preservar únicamente bloques marcados aprobados que sigan siendo válidos."""
+    aprobados = {}
+    for registro in sesion.get("historial_bloques", []):
+        if not isinstance(registro, dict):
+            continue
+        nombre = registro.get("bloque")
+        texto = registro.get("texto")
+        if nombre not in limites or not isinstance(texto, str):
+            continue
+        # Retrocompatibilidad con informes antiguos que guardaban solo longitud_valida.
+        marcado = registro.get("aceptable_para_ensamblaje") is True or (
+            registro.get("aceptable_para_ensamblaje") is None
+            and registro.get("longitud_valida") is True
+            and not registro.get("motivos_rechazo") and not registro.get("error"))
+        if not marcado or registro.get("motivos_rechazo") or registro.get("error"):
+            continue
+        menor, mayor = limites[nombre]
+        if not menor <= contar_palabras(texto) <= mayor:
+            continue
+        if detectar_problemas_editoriales(texto, original, nombre):
+            continue
+        if nombre == "historia" and "gancho" not in aprobados:
+            continue
+        if nombre == "cierre" and "historia" not in aprobados:
+            continue
+        aprobados[nombre] = texto
+    return aprobados
+
+
+def normalizar_comparacion(texto):
+    return re.sub(r"\s+", " ", texto.casefold()).strip(" .!¡?¿…")
+
+
 def ensamblar_por_bloques(original, duracion=35, modelo=MODELO,
                           max_intentos=2, generador=None,
                           gancho_aprobado=None, estrategia_gancho="modelo",
-                          premisa=None):
+                          premisa=None, sesion_previa=None,
+                          palabras_por_minuto=150):
     """Máximo seis llamadas y ningún recorte ciego de frases/palabras.
 
     Preserva todos los intentos y produce guion completo SOLO si se
@@ -300,11 +375,13 @@ def ensamblar_por_bloques(original, duracion=35, modelo=MODELO,
         raise ErrorNarrativa("Se requiere un guion de partida")
     if estrategia_gancho not in ("modelo", "reglas-primero"):
         raise ErrorNarrativa("Estrategia de gancho desconocida")
-    evaluacion_original = evaluar_guion(original, duracion)
+    evaluacion_original = evaluar_guion(original, duracion, palabras_por_minuto)
+    if sesion_previa is not None and not isinstance(sesion_previa, dict):
+        raise ErrorNarrativa("Sesión previa inválida")
     if original["naturaleza"] == "factual" or original["nicho"] == "noticias":
         raise ErrorNarrativa(
             "Prohibido reescribir automáticamente información factual o noticias")
-    limites = limites_de_bloques(duracion)
+    limites = limites_de_bloques(duracion, palabras_por_minuto)
     if gancho_aprobado is not None:
         if not isinstance(gancho_aprobado, str):
             raise ErrorNarrativa("El gancho aportado debe ser texto")
@@ -318,7 +395,9 @@ def ensamblar_por_bloques(original, duracion=35, modelo=MODELO,
         "guion_original": original,
         "evaluacion_original": evaluacion_original,
         "limites_bloques": {k: list(v) for k, v in limites.items()},
-        "historial_bloques": [],
+        "historial_bloques": list(sesion_previa.get("historial_bloques", [])) if sesion_previa else [],
+        "registros_recuperados": len(sesion_previa.get("historial_bloques", [])) if sesion_previa else 0,
+        "palabras_por_minuto": palabras_por_minuto,
         "bloques_aprobados_en_longitud": {},
         "guion": None,
         "evaluacion": None,
@@ -326,8 +405,9 @@ def ensamblar_por_bloques(original, duracion=35, modelo=MODELO,
         "publicacion_automatica_autorizada": False,
         "nota": "Control de longitud, no verificación semántica ni prueba de viralidad",
     }
-    aprobados = {}
-    if gancho_aprobado is None and estrategia_gancho == "reglas-primero":
+    aprobados = recuperar_bloques_aprobados(sesion_previa, original, limites) if sesion_previa else {}
+    resultado["bloques_aprobados_en_longitud"] = {k: contar_palabras(v) for k, v in aprobados.items()}
+    if gancho_aprobado is None and "gancho" not in aprobados and estrategia_gancho == "reglas-primero":
         alternativa = proponer_gancho_seguro(
             original, limites, premisa=premisa)
         if alternativa:
@@ -365,7 +445,10 @@ def ensamblar_por_bloques(original, duracion=35, modelo=MODELO,
     for bloque in ("gancho", "historia", "cierre"):
         if bloque in aprobados:
             continue
-        previo = None
+        previos = [x for x in resultado["historial_bloques"]
+                   if isinstance(x, dict) and x.get("bloque") == bloque
+                   and not x.get("aceptable_para_ensamblaje")]
+        previo = previos[-1] if previos else None
         exitoso = False
         for numero in range(1, max_intentos + 1):
             prompt = prompt_para_bloque(bloque, original, aprobados, limites, previo)
@@ -386,6 +469,17 @@ def ensamblar_por_bloques(original, duracion=35, modelo=MODELO,
                         palabras, minimo, maximo)]
                 motivos += detectar_problemas_editoriales(
                     texto, original, bloque, previo)
+                rechazos_anteriores = [
+                    x.get("texto", "") for x in resultado["historial_bloques"]
+                    if isinstance(x, dict) and x.get("bloque") == bloque
+                    and not x.get("aceptable_para_ensamblaje")
+                ]
+                if normalizar_comparacion(texto) and any(
+                    normalizar_comparacion(texto) == normalizar_comparacion(t)
+                    for t in rechazos_anteriores if isinstance(t, str)
+                ):
+                    if "Respuesta repetida literalmente tras un rechazo" not in motivos:
+                        motivos.append("Respuesta repetida literalmente tras un rechazo")
                 informe = {
                     "bloque": bloque,
                     "intento": numero,
@@ -421,7 +515,7 @@ def ensamblar_por_bloques(original, duracion=35, modelo=MODELO,
     nuevo = dict(original)
     nuevo.update(aprobados)
     nuevo["duracion_objetivo_segundos"] = duracion
-    evaluacion = evaluar_guion(nuevo, duracion)
+    evaluacion = evaluar_guion(nuevo, duracion, palabras_por_minuto)
     resultado["guion"] = nuevo
     resultado["evaluacion"] = evaluacion
     resultado["estado"] = evaluacion["estado_revision"]
@@ -435,6 +529,8 @@ def main():
     parser.add_argument("--duracion", type=int, default=35)
     parser.add_argument("--max-intentos", type=int, default=2)
     parser.add_argument("--modelo", default=MODELO)
+    parser.add_argument("--palabras-por-minuto", type=int, default=150,
+                        help="Velocidad de voz: 120 a 210 palabras/minuto")
     parser.add_argument("--gancho-aprobado", default=None,
                         help="Gancho manual de 5 a 8 palabras para saltar su generación")
     parser.add_argument("--premisa", default=None,
@@ -450,12 +546,13 @@ def main():
         if args.salida.exists():
             raise ErrorNarrativa(
                 "La salida ya existe: elige otro nombre para conservar trabajos")
-        original = leer_guion_guardado(args.revisar_archivo)
+        original, sesion_previa = leer_sesion_por_bloques(args.revisar_archivo)
         resultado = ensamblar_por_bloques(
             original, duracion=args.duracion,
             max_intentos=args.max_intentos, modelo=args.modelo,
             gancho_aprobado=args.gancho_aprobado,
-            estrategia_gancho=args.estrategia_gancho, premisa=args.premisa)
+            estrategia_gancho=args.estrategia_gancho, premisa=args.premisa,
+            sesion_previa=sesion_previa, palabras_por_minuto=args.palabras_por_minuto)
         resultado["fecha_revision"] = datetime.utcnow().isoformat() + "Z"
         args.salida.parent.mkdir(parents=True, exist_ok=True)
         with args.salida.open("x", encoding="utf-8") as f:
@@ -468,11 +565,17 @@ def main():
             "palabras_finales": eval_final["palabras"] if eval_final else None,
             "segundos_finales": eval_final["segundos_estimados"] if eval_final else None,
             "objetivo_segundos": args.duracion,
+            "registros_recuperados": resultado["registros_recuperados"],
+            "palabras_por_minuto": args.palabras_por_minuto,
             "numero_llamadas_ollama": sum(
                 1 for intento in resultado["historial_bloques"]
                 if intento.get("origen") not in (
                     "APROBADO_MANUALMENTE", "REGLA_FIEL_A_PREMISA",
                     "EXTRACTIVO_BORRADOR")),
+            "numero_llamadas_ollama_esta_ejecucion": sum(
+                1 for intento in resultado["historial_bloques"][resultado["registros_recuperados"]:]
+                if intento.get("origen") not in (
+                    "APROBADO_MANUALMENTE", "REGLA_FIEL_A_PREMISA", "EXTRACTIVO_BORRADOR")),
             "bloques_aprobados_en_longitud": resultado["bloques_aprobados_en_longitud"],
             "metodo_gancho": next((
                 paso.get("origen", "OLLAMA") for paso in resultado["historial_bloques"]
