@@ -587,7 +587,7 @@ class PuenteHTTPTest(unittest.TestCase):
         generar = PANEL.split("   async function generarDesdePremisa(idea){", 1)[1].split(
             "   btn.onclick=async()=>{", 1)[0]
         self.assertIn("idea.length>500", generar)
-        self.assertIn("body:JSON.stringify({idea})", generar)
+        self.assertIn("body:JSON.stringify({idea,duracion_objetivo_segundos:duracion})", generar)
         self.assertIn("cargarGuion(data,'nueva')", generar)
         self.assertNotIn("field.value=", generar)
         normal = PANEL.split("   btn.onclick=async()=>{", 1)[1].split(
@@ -658,13 +658,55 @@ class PuenteHTTPTest(unittest.TestCase):
             "REVISION_HUMANA_PENDIENTE")
         generar.assert_called_once()
 
+    def test_duracion_frontend_api_motor_y_persistencia(self):
+        from puente_local import PANEL
+        self.assertIn("document.getElementById('duration')", PANEL)
+        self.assertIn("duracion_objetivo_segundos:duracion", PANEL)
+        origin = "http://127.0.0.1:{}".format(self.port)
+        for duracion in (30, 35, 60):
+            with self.subTest(duracion=duracion):
+                def fake(idea, modelo, duracion):
+                    result = resultado_mock()
+                    result["duracion_objetivo"] = duracion
+                    return result
+                with patch("puente_local.ejecutar_motor", side_effect=fake) as modelo:
+                    status, body = self.pedir(
+                        "/api/guion", "POST",
+                        {"idea": "Una carta misteriosa",
+                         "duracion_objetivo_segundos": duracion},
+                        token="clave-prueba", origin=origin)
+                self.assertEqual(status, 200)
+                data = json.loads(body)
+                self.assertEqual(data["duracion_objetivo_segundos"], duracion)
+                self.assertEqual(
+                    abrir_generacion(data["id"], self.db)["duracion_objetivo"],
+                    duracion)
+                modelo.assert_called_once_with(
+                    "Una carta misteriosa", modelo="modelo-local",
+                    duracion=duracion)
+
+    def test_duracion_api_invalida_no_consulta_ollama(self):
+        origin = "http://127.0.0.1:{}".format(self.port)
+        for duracion in (19, 61, "30", True, None, 30.0):
+            with self.subTest(duracion=duracion):
+                with patch("puente_local.ejecutar_motor") as modelo:
+                    status, body = self.pedir(
+                        "/api/guion", "POST",
+                        {"idea": "Una carta misteriosa",
+                         "duracion_objetivo_segundos": duracion},
+                        token="clave-prueba", origin=origin)
+                self.assertEqual(status, 400)
+                self.assertIn("duración", body)
+                modelo.assert_not_called()
+
     def test_no_permite_dos_generaciones_simultaneas(self):
         primera_inicio = threading.Event()
         primera_fin = threading.Event()
         resultados = []
         origin = "http://127.0.0.1:{}".format(self.port)
 
-        def lenta(idea, modelo):
+        def lenta(idea, modelo, duracion):
+            self.assertEqual(duracion, 35)
             primera_inicio.set()
             primera_fin.wait(timeout=3)
             return resultado_mock()
