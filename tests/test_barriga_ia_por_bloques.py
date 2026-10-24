@@ -13,7 +13,7 @@ from barriga_ia_por_bloques import (
     ensamblar_por_bloques, generar_texto_local, limites_de_bloques,
     prompt_para_bloque, proponer_gancho_seguro, main,
     leer_sesion_por_bloques, detectar_problemas_editoriales,
-    condensar_historia_sin_cortar,
+    condensar_historia_sin_cortar, condensar_cierre_sin_cortar,
 )
 
 GANCHO_CORTO = "¡Daniel encontró una carta escrita ayer!"
@@ -531,6 +531,94 @@ class PruebasRescateEditorial(unittest.TestCase):
         self.assertIn("PLAN ALTERNATIVO", prompt)
         self.assertIn("128 palabras", prompt)
         self.assertNotIn("Pepe, siempre rebelde", prompt)
+
+
+
+class PruebasRecuperacionCierre(unittest.TestCase):
+    def test_detectar_pepe_primera_palabra_oracion(self):
+        texto = (
+            "Daniel encontró la carta. "
+            "Pepe fue arrestado por un crimen que no cometió."
+        )
+        motivos = detectar_problemas_editoriales(
+            texto, original(), "cierre")
+        self.assertIn("Posible personaje o nombre nuevo: Pepe", motivos)
+
+    def test_rescate_cierre_largo_conserva_ultimo_hecho_completo(self):
+        largo = (
+            "Daniel regresó al muelle y descubrió una carta sin remitente. "
+            "Mateo escuchó el motor de un barco y miró hacia el faro. "
+            "Daniel encontró a Mateo detrás de la puerta del faro y escuchó su voz."
+        )
+        compactado = condensar_cierre_sin_cortar(
+            largo, original(),
+            {"gancho": GANCHO_CORTO, "historia": HISTORIA_CORTA},
+            limites_de_bloques(35))
+        self.assertIsNotNone(compactado)
+        self.assertTrue(13 <= contar_palabras(compactado) <= 18)
+        self.assertTrue(compactado.endswith("y escuchó su voz."))
+        self.assertNotIn("regresó al muelle", compactado)
+
+    def test_cierre_con_pepe_ajeno_no_se_rescata_por_longitud(self):
+        inventado = (
+            "Daniel encontró una pulsera en el bosque. "
+            "Llevó la evidencia a la policía. "
+            "Pepe fue arrestado por un crimen que él no cometió. "
+            "La verdad salió a la luz."
+        )
+        self.assertIsNone(condensar_cierre_sin_cortar(
+            inventado, original(),
+            {"gancho": GANCHO_CORTO, "historia": HISTORIA_CORTA},
+            limites_de_bloques(35)))
+
+    def test_reintento_cierre_no_incluye_texto_fallido(self):
+        previo = {
+            "texto": "Pepe fue arrestado por un crimen.",
+            "palabras": 29,
+            "motivos_rechazo": [
+                "Extensión 29 palabras fuera de 13 a 18"
+            ],
+        }
+        prompt = prompt_para_bloque(
+            "cierre", original(),
+            {"gancho": GANCHO_CORTO, "historia": HISTORIA_CORTA},
+            limites_de_bloques(35), anterior=previo)
+        self.assertIn("13 a 18 palabras", prompt)
+        self.assertIn("29 palabras", prompt)
+        self.assertNotIn("Pepe fue arrestado", prompt)
+        self.assertIn(HISTORIA_CORTA, prompt)
+
+    def test_reanudar_decima_recicla_gancho_e_historia_sin_ollama(self):
+        session = {
+            "guion_original": original(),
+            "historial_bloques": [
+                {"bloque": "gancho", "intento": 1, "texto": GANCHO_CORTO,
+                 "palabras": 6, "longitud_valida": True,
+                 "aceptable_para_ensamblaje": True, "motivos_rechazo": []},
+                {"bloque": "historia", "intento": 1, "texto": HISTORIA_CORTA,
+                 "palabras": 65, "longitud_valida": True,
+                 "aceptable_para_ensamblaje": True, "motivos_rechazo": []},
+                {"bloque": "cierre", "intento": 1,
+                 "texto": "Pepe fue arrestado por un crimen.",
+                 "palabras": 6, "longitud_valida": False,
+                 "aceptable_para_ensamblaje": False,
+                 "motivos_rechazo": ["Extensión 6 palabras fuera de 13 a 18"]},
+            ],
+        }
+        llamadas = []
+        def modelo(prompt, modelo):
+            llamadas.append(prompt)
+            return CIERRE_CORTO
+        salida = ensamblar_por_bloques(
+            original(), sesion_previa=session, generador=modelo)
+        self.assertEqual(len(llamadas), 1)
+        self.assertEqual(salida["registros_recuperados"], 3)
+        self.assertEqual(salida["guion"]["historia"], HISTORIA_CORTA)
+        self.assertEqual(salida["guion"]["gancho"], GANCHO_CORTO)
+        self.assertEqual(salida["guion"]["cierre"], CIERRE_CORTO)
+        self.assertTrue(salida["evaluacion"]["apto_para_revision_humana"])
+        self.assertFalse(salida["publicacion_automatica_autorizada"])
+
 
 
 class PruebasRecuperacionSexta(unittest.TestCase):
