@@ -153,6 +153,24 @@ def auditar_fidelidad(idea, guion):
                 "Cambio de protagonista del suceso: en la premisa quien "
                 "desaparece es su {}, pero el relato no conserva "
                 "ese hecho".format(parentesco))
+    # Finales de autoelogio o giros inconcretos no resuelven un
+    # misterio de desaparición. Una coincidencia es señal de rechazo
+    # editorial, no sustituto de comprobar toda la causalidad.
+    cierre_normalizado = " ".join(normalizar(cierre))
+    if (re.search(r"\\bverdadero heroe\\b|\\bheroe que siempre sono ser\\b",
+                  cierre_normalizado)
+            or re.search(
+                r"\\b(?:antigua|gran|oscura) conspiracion\\b",
+                cierre_normalizado)
+            and not re.search(
+                r"\\b(?:nombre|prueba|documento|confesion|culpable|orden|"
+                r"motivo|plan|fecha|firma|grabacion|fotografia)\\b",
+                cierre_normalizado)
+    ):
+        problemas.append(
+            "Cierre genérico: no revela un hecho concreto ni explica el "
+            "misterio planteado")
+
     repetidas = _repeticion_de_cierre(historia, cierre)
     if repetidas:
         problemas.append(
