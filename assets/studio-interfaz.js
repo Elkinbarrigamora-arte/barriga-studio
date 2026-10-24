@@ -463,6 +463,29 @@
     decorate();
   }
 
+  function installBenefits() {
+    const section = $("#proyectos");
+    if (!section || $("#studio-benefits")) return;
+    const benefits = create("div", "studio-benefits");
+    benefits.id = "studio-benefits";
+    benefits.setAttribute("aria-label", "Beneficios reales de Barriga Studio");
+    [
+      ["▣", "Proyectos locales", "Guardados en este navegador"],
+      ["↧", "Respaldo exportable", "Copia JSON de tus borradores"],
+      ["✦", "Revisión editorial", "Resultados de IA sujetos a validación"],
+      ["◇", "Plantillas", "Tres estilos configurables"]
+    ].forEach(([symbol, name, detail]) => {
+      const item = create("div", "studio-benefit");
+      const ico = create("span", "studio-benefit-icon", symbol);
+      ico.setAttribute("aria-hidden", "true");
+      const text = create("span", "studio-benefit-copy");
+      text.append(create("strong", "", name), create("small", "", detail));
+      item.append(ico, text);
+      benefits.append(item);
+    });
+    section.after(benefits);
+  }
+
   function init() {
     if ($("#studio-project-tools")) return;
     const status = create("p", "studio-ui-status");
@@ -475,6 +498,7 @@
     installSteps();
     installWorkspace();
     installProjects();
+    installBenefits();
   }
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", init);
   else init();
