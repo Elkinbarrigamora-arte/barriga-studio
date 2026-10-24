@@ -610,11 +610,10 @@ def condensar_historia_sin_cortar(texto, original, limites, anterior=None,
 
 def condensar_cierre_sin_cortar(texto, original, generado, limites,
                                 rechazados=()):
-    """Rescatar únicamente un final consecutivo de frases completas.
+    """Rescate conservador: frases finales completas o adverbios redundantes.
 
-    Conserva el desenlace final, impide personajes nuevos y exige que al
-    menos dos palabras significativas estén presentes en bloques aprobados.
-    No confirma causalidad o calidad: requiere revisión humana.
+    No se eliminan hechos, nombres, relaciones ni oraciones incompletas.
+    El rescate no certifica causalidad ni calidad: requiere revisión humana.
     """
     minimo, maximo = limites["cierre"]
     if not isinstance(texto, str) or not maximo < contar_palabras(texto) <= maximo * 4:
@@ -907,8 +906,14 @@ def ensamblar_por_bloques(original, duracion=35, modelo=MODELO,
                     condensado = condensar_cierre_sin_cortar(
                         texto, original, aprobados, limites, rechazos_anteriores)
                     if condensado:
+                        origen_edicion = (
+                            "DEPURACION_ADVERBIOS_REDUNDANTES"
+                            if (contar_palabras(texto) - contar_palabras(condensado)
+                                <= 2 and len(re.split(
+                                    r"(?<=[.!?…])\s+", texto.strip())) == 1)
+                            else "EXTRACCION_CIERRE_ORACIONES_COMPLETAS"
+                        )
                         texto = condensado
-                        origen_edicion = "EXTRACCION_CIERRE_ORACIONES_COMPLETAS"
                 palabras = contar_palabras(texto)
                 minimo, maximo = limites[bloque]
                 valido = minimo <= palabras <= maximo
