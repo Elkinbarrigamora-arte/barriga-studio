@@ -624,6 +624,25 @@ class PruebasRecuperacionCierre(unittest.TestCase):
         self.assertNotIn("Pepe fue arrestado", prompt)
         self.assertIn(HISTORIA_CORTA, prompt)
 
+    def test_segundo_cierre_cambia_instrucciones_sin_repetir_fallo(self):
+        previo = {
+            "texto": "La verdad salió a la luz, y todo terminó bien.",
+            "palabras": 12,
+            "motivos_rechazo": ["Extensión 12 palabras fuera de 13 a 18"],
+        }
+        base = original()
+        aprobados = {"gancho": GANCHO_CORTO, "historia": HISTORIA_CORTA}
+        limites = limites_de_bloques(35)
+        uno = prompt_para_bloque("cierre", base, aprobados, limites)
+        dos = prompt_para_bloque("cierre", base, aprobados, limites,
+                                anterior=previo)
+        self.assertNotEqual(uno, dos)
+        self.assertIn("SEGUNDO INTENTO", dos)
+        self.assertIn("13 Y 18 PALABRAS", dos)
+        self.assertIn("12 palabras", dos)
+        self.assertIn(HISTORIA_CORTA, dos)
+        self.assertNotIn(previo["texto"], dos)
+
     def test_reanudar_decima_recicla_gancho_e_historia_sin_ollama(self):
         session = {
             "guion_original": original(),
