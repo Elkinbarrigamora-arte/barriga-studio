@@ -63,7 +63,7 @@ PANEL = r'''
    reparar.type='button';reparar.className='button ghost';
    reparar.style.margin='8px';
    reparar.textContent='Reparar solo cierre';
-   reparar.hidden=true;
+   reparar.style.display='none';
    const msg=document.createElement('p');msg.className='muted';msg.setAttribute('role','status');
    msg.textContent='Escribe tu idea en Guion (arriba) y pulsa Generar. Requiere Ollama encendido.';
    const historial=document.createElement('select');
@@ -82,7 +82,7 @@ PANEL = r'''
       field.dispatchEvent(new Event('input',{bubbles:true}));
       ultima=data.id;
       sePuedeReparar=data.estado==='BLOQUE_RECHAZADO_CIERRE';
-      reparar.hidden=!sePuedeReparar;
+      reparar.style.display=sePuedeReparar?'inline-block':'none';
       const msgEstado=data.apto_para_revision_humana ?
         'APTO PARA REVISION HUMANA (no publicado).' :
         'BORRADOR RECHAZADO O INCOMPLETO; revisar antes de utilizar.';
