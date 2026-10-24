@@ -102,7 +102,7 @@ class PruebasPorBloques(unittest.TestCase):
                 "desaparecido hace veinte años.")
         draft = original()
         draft.update(
-            gancho="Juan recibe una carta de su hermano desaparecido",
+            gancho="Juan recibe una carta antigua de su hermano desaparecido",
             historia=HISTORIA_CORTA,
             cierre=CIERRE_CORTO,
         )
@@ -113,6 +113,7 @@ class PruebasPorBloques(unittest.TestCase):
         resultado = ensamblar_por_bloques(
             draft, generador=simular, premisa=idea,
             estrategia_gancho="reglas-primero", reutilizar_borrador=True)
+        self.assertEqual(contar_palabras(draft["gancho"]), 9)
         self.assertEqual(resultado["guion"]["gancho"],
                          "¡La carta de su hermano fue escrita ayer!")
         self.assertEqual(llamadas, [])
