@@ -1,7 +1,7 @@
 # Barriga Studio — Auditoría e implementación de interfaz
 **Fecha:** 2026-10-24  
 **Rama experimental:** `fix/barriga-ia-reanudar-sexta-20261023`  
-**Evidencia probada:** commit `b6543eacb36cdef4eea6e1a645aa0ca3fa03d657`, GitHub Actions ejecución `40133145967`
+**Evidencia probada:** commit `d5064aed49999f191216cfb1e607bb3611ba58b8`, GitHub Actions ejecución `40133383674`
 
 ## Resumen ejecutivo
 Se conservó el proyecto existente en HTML, CSS y JavaScript, sus IDs, sus funciones de guardado y restauración, y la integración experimental con Ollama mediante `tools/puente_local.py`.
@@ -13,7 +13,7 @@ Se incorporó una capa modular de interfaz con navegación, portada cinematográ
 ## Cambios realizados
 - `index.html`: carga aditiva de los nuevos archivos, conservando la estructura y los controles históricos.
 - `assets/studio-interfaz.css`: diseño oscuro cinematográfico y responsive; proporción inicial 27/40/16/17 en escritorio; cinco pasos.
-- `assets/studio-interfaz.js`: reutilización de controles existentes, selector de plantillas, contador de caracteres, visor de imagen, preferencias de idioma/música, reproductor de archivos MP4/WebM, descarga del archivo local cargado, buscador, favoritos y filtros.
+- `assets/studio-interfaz.js`: reutilización de controles existentes, selector de plantillas, contador de caracteres, visor de imagen, preferencias de idioma/música, reproductor de archivos MP4/WebM, descarga del archivo local cargado, buscador, favoritos y filtros. Franja inferior con cuatro beneficios reales y editables.
 - `assets/banner-personajes.svg`: ilustración independiente y editable de fresa, piña, naranja y personaje de cabello rojo. No es una imagen completa de la interfaz.
 - `assets/studio-mejoras.js`: reparación de importación de respaldo para conservar `ideaOriginal`, `ultimoGuion` y textos completos sin truncamientos silenciosos.
 - `tests/test_studio_interfaz.py`: pruebas regresivas de estructura, seguridad de datos y sintaxis JavaScript.
@@ -22,10 +22,10 @@ Se incorporó una capa modular de interfaz con navegación, portada cinematográ
 - `.github/workflows/test-barriga-ia-calendario.yml`: validación automática, capturas y evidencias descargables.
 
 ## Validaciones completadas
-**GitHub Actions / commit probado:** `b6543eac...`  
-**Python 3.9:** 185 pruebas de `unittest` aprobadas.  
-**Python 3.11:** 185 pruebas de `unittest` aprobadas.  
-**Chromium:** 28 comprobaciones interactivas aprobadas en almacenamiento efímero, entre ellas:
+**GitHub Actions / commit probado:** `d5064aed...`  
+**Python 3.9:** 186 pruebas de `unittest` aprobadas.  
+**Python 3.11:** 186 pruebas de `unittest` aprobadas.  
+**Chromium:** 29 comprobaciones interactivas aprobadas en almacenamiento efímero, entre ellas:
 - Montaje del editor con cuatro columnas.
 - Selección efectiva de plantilla y tipo de voz.
 - Persistencia de preferencia musical.
