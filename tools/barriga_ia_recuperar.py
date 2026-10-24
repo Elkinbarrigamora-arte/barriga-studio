@@ -91,7 +91,7 @@ def cargar_sexta(ruta, duracion):
     return registro, original, historial, aprobados, limites
 
 
-def prompt_historia(original, gancho, limites, rechazados, intento):
+def prompt_historia(original, gancho, limites, rechazados, intento, motivos=None):
     minimo, maximo = limites["historia"]
     # No reinyectar los párrafos rechazados: dan lugar a respuestas repetidas.
     nombres = [
@@ -111,9 +111,9 @@ def prompt_historia(original, gancho, limites, rechazados, intento):
             "No anticipar el cierre; terminar en una oración COMPLETA con punto",
             "Una sola clave JSON texto, sin otros campos",
         ],
-        "motivos_rechazo": [
+        "motivos_rechazo": (motivos or [
             "La versión anterior incumplió longitud, integridad o unicidad"
-        ],
+        ])[:8],
         "cantidad_versiones_previas_rechazadas": len(rechazados),
     }
     encabezado = (
@@ -189,11 +189,18 @@ def reanudar(registro, original, historial, aprobados, limites,
     for bloque in BLOQUES:
         if bloque in fijos:
             continue
+        motivos_actuales = []
+        historicos = [
+            x for x in historial if isinstance(x, dict)
+            and x.get("bloque") == bloque
+            and not x.get("aceptable_para_ensamblaje", False)]
+        if historicos:
+            motivos_actuales = list(historicos[-1].get("motivos_rechazo", []))
         for intento in range(1, max_intentos + 1):
             if bloque == "historia":
                 prompt = prompt_historia(
                     original, fijos["gancho"], limites,
-                    todos_rechazados[bloque], intento)
+                    todos_rechazados[bloque], intento, motivos_actuales)
             else:
                 prompt = prompt_cierre(
                     original, fijos, limites, todos_rechazados[bloque], intento)
@@ -219,6 +226,7 @@ def reanudar(registro, original, historial, aprobados, limites,
             }
             historial_nuevo.append(paso)
             if motivos:
+                motivos_actuales = motivos
                 if texto:
                     todos_rechazados[bloque].add(texto_canonico(texto))
                 continue
