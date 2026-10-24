@@ -17,6 +17,7 @@ from barriga_ia_narrativa import (
     ErrorNarrativa, generar_local, preparar_solicitud,
 )
 from barriga_ia_por_bloques import ensamblar_por_bloques
+from barriga_ia_fidelidad import auditar_fidelidad
 
 DEFAULT_DB = Path(__file__).resolve().parents[1] / "local-data" / "guiones-locales.sqlite3"
 
@@ -29,38 +30,95 @@ def validar_solicitud(idea, duracion):
 
 
 def ejecutar_motor(idea, modelo, duracion=35):
-    """Convertir idea en borrador y evaluar por bloques; nunca aprobar publicación.
+    """Generar, medir fidelidad, ensamblar y exigir revisión humana.
 
-    El motor por bloques NO certifica originalidad, veracidad ni coherencia
-    semántica profunda; solo declara aptitud para revisión humana.
+    Si se cambia la premisa, no ensambla ni marca el guion como apto.
+    Máximo dos intentos de borrador; los fallos también quedan persistibles.
     """
     validar_solicitud(idea, duracion)
     inicio = time.monotonic()
+    idea = idea.strip()
     prompt = preparar_solicitud(idea, "leyendas", "ficcion", duracion=duracion)
-    borrador = generar_local(prompt, modelo=modelo)
-    informe = ensamblar_por_bloques(borrador, duracion=duracion, modelo=modelo)
+    prompt += (
+        "\nPREMISA INMUTABLE DEL AUTOR: " + json.dumps(idea, ensure_ascii=False)
+        + "\nEl conflicto, objeto central, personajes definidos y pistas "
+          "temporales de esa premisa son OBLIGATORIOS. "
+          "No sustituyas cartas por ríos, objetos mágicos ni conflictos "
+          "nuevos. Evita preguntas al espectador. "
+          "Devuelve JSON válido y respeta la duración."
+    )
+    intentos_borrador = []
+    borrador = None
+    razones = []
+    for numero in (1, 2):
+        propuesta = generar_local(
+            prompt if numero == 1 else (
+                prompt + "\nREINTENTO POR DESVIACION DE PREMISA. "
+                "La anterior salida fue RECHAZADA por: "
+                + "; ".join(razones)
+                + ". Reescribe desde la premisa original y cambia "
+                  "completamente la trama incorrecta."
+            ),
+            modelo=modelo,
+            temperatura=0.25 if numero == 1 else 0.4
+        )
+        borrador = propuesta
+        razones = auditar_fidelidad(idea, propuesta)
+        intentos_borrador.append({
+            "intento": numero,
+            "motivos_fidelidad": razones,
+            "borrador": propuesta,
+            "fidelidad_estructural_aprobada": not razones,
+        })
+        if not razones:
+            break
+    if razones:
+        return {
+            "version": 2,
+            "idea": idea,
+            "modelo": modelo,
+            "duracion_objetivo": duracion,
+            "estado": "PREMISA_DESVIADA",
+            "motivos_fidelidad": razones,
+            "apto_para_revision_humana": False,
+            "aprobacion_humana": False,
+            "publicacion_automatica_autorizada": False,
+            "guion": borrador,
+            "guion_estructurado_completo": False,
+            "evaluacion": None,
+            "informe": {"estado": "PREMISA_DESVIADA",
+                        "intentos_borrador": intentos_borrador},
+            "segundos_inferencia": round(time.monotonic() - inicio, 1),
+        }
+
+    informe = ensamblar_por_bloques(
+        borrador, duracion=duracion, modelo=modelo, premisa=idea)
     completo = informe.get("guion")
     if not isinstance(completo, dict):
-        # Nunca disfrazar un intento rechazado como aprobación editorial.
         completo = borrador
+    motivos_finales = auditar_fidelidad(idea, completo)
     eval_final = informe.get("evaluacion")
+    estado = ("PREMISA_DESVIADA" if motivos_finales
+              else informe.get("estado", "INCOMPLETO"))
     aceptable = bool(
-        eval_final and eval_final.get("apto_para_revision_humana")
-        and informe.get("estado") == "REVISION_HUMANA_PENDIENTE"
+        not motivos_finales and eval_final
+        and eval_final.get("apto_para_revision_humana")
+        and estado == "REVISION_HUMANA_PENDIENTE"
     )
     return {
-        "version": 1,
-        "idea": idea.strip(),
+        "version": 2,
+        "idea": idea,
         "modelo": modelo,
         "duracion_objetivo": duracion,
-        "estado": informe.get("estado", "INCOMPLETO"),
+        "estado": estado,
+        "motivos_fidelidad": motivos_finales,
         "apto_para_revision_humana": aceptable,
         "aprobacion_humana": False,
         "publicacion_automatica_autorizada": False,
         "guion": completo,
         "guion_estructurado_completo": isinstance(informe.get("guion"), dict),
         "evaluacion": eval_final,
-        "informe": informe,
+        "informe": dict(informe, intentos_borrador=intentos_borrador),
         "segundos_inferencia": round(time.monotonic() - inicio, 1),
     }
 
