@@ -97,7 +97,9 @@ PANEL = r'''
       const tipo=origen==='nueva'?'NUEVA GENERACIÓN':
         origen==='reparacion'?'NUEVA REPARACIÓN':'REGISTRO RECUPERADO DEL HISTORIAL';
       estadoVista.textContent=tipo+' · ID: '+(data.id||'no informado')+
-        ' · Estado: '+(data.estado||'no informado');
+        ' · Estado: '+(data.estado||'no informado')+
+        (Number.isInteger(data.duracion_objetivo_segundos)?
+          ' · Duración objetivo: '+data.duracion_objetivo_segundos+' s':'');
       const guion=data.guion||{};
       const partes=['GANCHO',guion.gancho||'','', 'HISTORIA',guion.historia||'',
                     '', 'CIERRE',guion.cierre||''];
@@ -185,13 +187,20 @@ PANEL = r'''
          estadoVista.textContent='SIN GENERACIÓN NUEVA · No se envió ninguna solicitud a Ollama.';
          return;
       }
+      const selectorDuracion=document.getElementById('duration');
+      const duracion=Number.parseInt(selectorDuracion?.value||'',10);
+      if(!Number.isInteger(duracion)||duracion<20||duracion>60){
+         msg.textContent='Selecciona una duración válida de 20 a 60 segundos antes de generar.';
+         estadoVista.textContent='SIN GENERACIÓN NUEVA · Duración inválida.';
+         return;
+      }
       btn.disabled=true;recuperar.disabled=true;reparar.disabled=true;rehacer.disabled=true;
-      estadoVista.textContent='GENERACIÓN EN CURSO · Lo que se ve abajo es una versión anterior, NO el resultado nuevo.';
+      estadoVista.textContent='GENERACIÓN EN CURSO · '+duracion+' s solicitados · El resultado inferior es anterior.';
       msg.textContent='Ollama está generando y revisando los tres bloques...';
       try{
          const resp=await fetch('/api/guion',{method:'POST',headers:{
               ...cabeceras,'Content-Type':'application/json'},
-              body:JSON.stringify({idea})});
+              body:JSON.stringify({idea,duracion_objetivo_segundos:duracion})});
          const data=await resp.json();
          if(!resp.ok)throw Error(data.error||('Error HTTP '+resp.status));
          if(!data.id)throw Error('El servidor no devolvió identificador de generación');
@@ -313,15 +322,16 @@ def presentar_generacion(resultado, ident):
         "aprobacion_humana": False,
         "publicacion_automatica_autorizada": False,
         "modelo": resultado.get("modelo", ""),
+        "duracion_objetivo_segundos": resultado.get("duracion_objetivo", 35),
         "segundos": resultado.get("segundos_inferencia", 0),
         "rendimiento": resultado.get("rendimiento", {}),
         "reanudado_desde": resultado.get("reanudado_desde"),
     }
 
 
-def guion(idea, modelo, db):
-    """Una única ruta de narrativa por bloques + informe persistente."""
-    resultado = ejecutar_motor(idea, modelo=modelo)
+def guion(idea, modelo, db, duracion=35):
+    """Ruta única: conservar duración solicitada y persistir la generación."""
+    resultado = ejecutar_motor(idea, modelo=modelo, duracion=duracion)
     ident = guardar_generacion(resultado, db=db)
     return presentar_generacion(resultado, ident)
 
@@ -403,8 +413,11 @@ def servidor(studio, token, puerto, modelo, db):
                     return self.send(400, {"error": "La solicitud debe ser un objeto JSON"})
                 if route == "/api/guion":
                     idea = args.get("idea", "")
-                    if not isinstance(idea, str) or not 2 <= len(idea.strip()) <= 2400:
-                        return self.send(400, {"error": "Escribe una idea entre 2 y 2400 caracteres"})
+                    if not isinstance(idea, str) or not 5 <= len(idea.strip()) <= 500:
+                        return self.send(400, {"error": "La premisa debe tener entre 5 y 500 caracteres"})
+                    duracion = args.get("duracion_objetivo_segundos", 35)
+                    if type(duracion) is not int or not 20 <= duracion <= 60:
+                        return self.send(400, {"error": "La duración debe ser un entero de 20 a 60 segundos"})
                 else:
                     ident = args.get("id", "")
                     if not isinstance(ident, str) or len(ident) != 23:
@@ -421,7 +434,7 @@ def servidor(studio, token, puerto, modelo, db):
                         reparado, nuevo_id = reanudar_cierre(ident, modelo, db)
                         resultado = presentar_generacion(reparado, nuevo_id)
                     else:
-                        resultado = guion(idea.strip(), modelo, db)
+                        resultado = guion(idea.strip(), modelo, db, duracion=duracion)
                 finally:
                     generacion_libre.release()
                 self.send(200, resultado)
