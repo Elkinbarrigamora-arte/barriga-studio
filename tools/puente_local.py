@@ -74,6 +74,11 @@ PANEL = r'''
    usar.type='button';usar.className='button ghost';usar.style.margin='8px';
    usar.textContent='Usar este resultado en el editor';
    usar.style.display='none';
+   const recuperarIdea=document.createElement('button');
+   recuperarIdea.type='button';recuperarIdea.className='button ghost';
+   recuperarIdea.style.margin='8px';
+   recuperarIdea.textContent='Recuperar idea original del registro';
+   recuperarIdea.style.display='none';
    const historial=document.createElement('select');
    historial.setAttribute('aria-label','Generaciones locales guardadas');
    const recuperar=document.createElement('button');
@@ -90,6 +95,7 @@ PANEL = r'''
       vista.textContent=generado;
       vista.style.display='block';
       usar.style.display='inline-block';
+      recuperarIdea.style.display=typeof data.idea==='string'&&data.idea.trim()?'inline-block':'none';
       ultima=data.id;
       sePuedeReparar=data.estado==='BLOQUE_RECHAZADO_CIERRE';
       reparar.style.display=sePuedeReparar?'inline-block':'none';
@@ -131,6 +137,19 @@ PANEL = r'''
       field.value=generado;
       field.dispatchEvent(new Event('input',{bubbles:true}));
       msg.textContent='Versión cargada para editar; la idea original se conserva en Restaurar idea original. Guarda tu proyecto si quieres conservar la edición.';
+   };
+   recuperarIdea.onclick=()=>{
+      if(!ultimoResultado||typeof ultimoResultado.idea!=='string')return;
+      const idea=ultimoResultado.idea.trim();
+      if(!idea){msg.textContent='El registro no contiene una idea original guardada.';return}
+      const actual=field.value.trim();
+      if(actual&&actual!==idea&&
+         !confirm('¿Recuperar la idea del registro? El texto actual sin guardar será sustituido.'))return;
+      field.dataset.ideaOriginal=idea;
+      field.dataset.ultimoGuion='';
+      field.value=idea;
+      field.dispatchEvent(new Event('input',{bubbles:true}));
+      msg.textContent='Idea original recuperada del registro. Revísala antes de generar una versión nueva.';
    };
    async function refrescar(){
       const resp=await fetch('/api/historial',{headers:cabeceras});
@@ -198,7 +217,7 @@ PANEL = r'''
         cargarGuion(data);
       }catch(e){msg.textContent='No se pudo recuperar: '+e.message}
    };
-   box.append(title,btn,reparar,restaurar,msg,vista,usar,historial,recuperar);
+   box.append(title,btn,reparar,restaurar,msg,vista,usar,recuperarIdea,historial,recuperar);
    field.parentElement.appendChild(box);
    refrescar().catch(e=>{msg.textContent='Historial no disponible: '+e.message});
  }
