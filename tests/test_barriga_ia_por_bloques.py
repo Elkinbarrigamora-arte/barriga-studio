@@ -638,7 +638,7 @@ class PruebasRecuperacionCierre(unittest.TestCase):
                                 anterior=previo)
         self.assertNotEqual(uno, dos)
         self.assertIn("SEGUNDO INTENTO", dos)
-        self.assertIn("13 Y 18 PALABRAS", dos)
+        self.assertIn("13 a 18 palabras", dos)
         self.assertIn("12 palabras", dos)
         self.assertIn(HISTORIA_CORTA, dos)
         self.assertNotIn(previo["texto"], dos)
