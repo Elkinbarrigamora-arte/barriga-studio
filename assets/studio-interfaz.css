@@ -85,15 +85,15 @@ main{width:min(100%,1590px);max-width:none;margin:0 auto;padding:20px clamp(14px
 .studio-ai-btn{margin-top:9px;width:100%;border:1px solid #913cf1;background:linear-gradient(110deg,#7128bb,#b02ebc);
  border-radius:11px;padding:12px;color:#fff;font-size:12px;font-weight:800;cursor:pointer}
 .studio-workspace .studio-templates .cards{display:grid;grid-template-columns:1fr;gap:9px}
-.studio-workspace .studio-template-card{cursor:pointer;position:relative;display:grid;grid-template-columns:39% 1fr;gap:13px;
- min-height:126px;padding:12px;align-items:center;border:1px solid #314a70;border-radius:14px;overflow:hidden;
+#plantillas .studio-template-card{cursor:pointer;position:relative;display:grid;grid-template-columns:35% 1fr;gap:13px;
+ min-height:117px;padding:11px;align-items:center;border:1px solid #314a70;border-radius:14px;overflow:hidden;
  background:#0a1c39;box-shadow:none;transform:none}
-.studio-workspace .studio-template-card:nth-child(1){background:linear-gradient(95deg,#142e49a8,#081528),
- url('https://images.unsplash.com/photo-1571771894821-ce9b6c11b08e?auto=format&fit=crop&w=480&q=80') left/cover}
+.studio-workspace .studio-template-card:nth-child(1){background:linear-gradient(95deg,#0a193566,#07152ced 65%),
+ url('banner-personajes.svg') left center/cover}
 .studio-workspace .studio-template-card:nth-child(2){background:linear-gradient(95deg,#101c32ad,#081528),
  url('https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?auto=format&fit=crop&w=480&q=80') left/cover}
-.studio-workspace .studio-template-card:nth-child(3){background:linear-gradient(95deg,#2818429e,#081528),
- url('https://images.unsplash.com/photo-1534447677768-be436bb09401?auto=format&fit=crop&w=480&q=80') left/cover}
+.studio-workspace .studio-template-card:nth-child(3){background:linear-gradient(95deg,#28184266,#081528ec 65%),
+ url('banner-personajes.svg') right center/cover}
 .studio-workspace .studio-template-card .fruit{display:grid;place-items:center;font-size:58px;text-shadow:0 10px 12px #0009}
 .studio-workspace .studio-template-card h3{font-size:15px;margin:4px 0}
 .studio-workspace .studio-template-card p{font-size:11px;color:#cad7ed;line-height:1.4}
@@ -177,16 +177,16 @@ main{width:min(100%,1590px);max-width:none;margin:0 auto;padding:20px clamp(14px
  .studio-header> a.button.ghost{display:none}
  .studio-header-tools .studio-language{max-width:107px}
  main{padding:12px 12px 40px}
- .studio-cinematic{padding:25px 16px;min-height:375px;justify-content:flex-start;align-items:center;text-align:center}
+ .studio-cinematic{padding:25px 16px;min-height:408px;justify-content:flex-start;align-items:center;text-align:center}
  .studio-cinematic .tag,.studio-cinematic h1,.studio-cinematic p{max-width:100%;text-align:center}
  .studio-cinematic h1{font-size:48px;letter-spacing:-1px;margin:7px 0}
  .studio-cinematic p{font-size:12px;max-width:95%}
  .studio-cinematic>a.button{margin:4px 2px;font-size:12px;min-height:44px}
- .studio-scene{top:auto;inset:auto 0 0;height:48%;opacity:.67}
+ .studio-scene{top:auto;inset:auto 0 0;height:43%;opacity:.36}
  .studio-scene-fruit{font-size:90px!important}
  .studio-scene-fruits{align-items:flex-end}
- .workflow{gap:4px;overflow-x:auto;justify-content:flex-start;scroll-snap-type:x proximity;padding-bottom:4px}
- .studio-step{white-space:nowrap;flex:0 0 auto;min-width:93px;padding:9px;font-size:11px;scroll-snap-align:start}
+ .workflow{gap:5px;flex-wrap:wrap;overflow-x:visible;justify-content:center;padding-bottom:4px}
+ .studio-step{white-space:nowrap;flex:1 1 30%;min-width:104px;padding:9px;font-size:11px;scroll-snap-align:start}
  .studio-workspace{grid-template-columns:1fr!important;gap:15px}
  .studio-workspace>section{grid-column:1}
  .studio-workspace .studio-template-card{grid-template-columns:34% 1fr}
