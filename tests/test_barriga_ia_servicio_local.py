@@ -70,6 +70,8 @@ class MotorUnificadoTest(unittest.TestCase):
                 salida = ejecutar_motor(
                     "Una carta escrita ayer", "modelo-local", duracion=35)
         crear.assert_called_once()
+        self.assertIn('"nicho": "ficcion"', crear.call_args[0][0])
+        self.assertIn("PREMISA INMUTABLE", crear.call_args[0][0])
         estructurar.assert_called_once_with(
             draft, duracion=35, modelo="modelo-local",
             premisa="Una carta escrita ayer")
