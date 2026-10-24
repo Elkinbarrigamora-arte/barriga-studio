@@ -14,6 +14,7 @@ from barriga_ia_por_bloques import (
     prompt_para_bloque, proponer_gancho_seguro, main,
     leer_sesion_por_bloques, detectar_problemas_editoriales,
     condensar_historia_sin_cortar, condensar_cierre_sin_cortar,
+    verificar_continuidad_entre_bloques,
 )
 
 GANCHO_CORTO = "¡Daniel encontró una carta escrita ayer!"
@@ -618,6 +619,106 @@ class PruebasRecuperacionCierre(unittest.TestCase):
         self.assertEqual(salida["guion"]["cierre"], CIERRE_CORTO)
         self.assertTrue(salida["evaluacion"]["apto_para_revision_humana"])
         self.assertFalse(salida["publicacion_automatica_autorizada"])
+
+
+
+
+HISTORIA_UNDECIMA = (
+    "Al abrir el sobre, Daniel leyó una fecha sorprendente: '2023'. "
+    "Pepe, rebelde, había confesado un oscuro secreto. "
+    "Daniel investigó, encontrando detalles contradictorios. "
+    "En un bosque, un objeto brillante llamó su atención: una antigua pulsera. "
+    "Con la pulsera en mano, Daniel se dirigió a la policía. "
+    "Su testimonio y la evidencia hicieron que Pepe fuera arrestado "
+    "por un crimen que él nunca cometió. "
+    "La revelación resolvió años de incertidumbre y traición."
+)
+CIERRE_UNDECIMA = (
+    "La revelación resolvió años de incertidumbre y traición. "
+    "El secreto era un engaño."
+)
+
+
+class PruebasContinuidadUndecima(unittest.TestCase):
+    def test_fecha_2023_no_reemplaza_ayer_sin_explicacion(self):
+        errores = verificar_continuidad_entre_bloques(
+            "historia", HISTORIA_UNDECIMA, {"gancho": GANCHO_CORTO})
+        self.assertTrue(any("temporal" in x for x in errores))
+
+    def test_pepe_en_aposicion_simple_es_detectado(self):
+        errores = detectar_problemas_editoriales(
+            HISTORIA_UNDECIMA, original(), "historia")
+        self.assertIn("Posible personaje o nombre nuevo: Pepe", errores)
+
+    def test_cierre_repite_frase_y_no_revela_engaño(self):
+        errores = verificar_continuidad_entre_bloques(
+            "cierre", CIERRE_UNDECIMA,
+            {"gancho": GANCHO_CORTO, "historia": HISTORIA_UNDECIMA})
+        self.assertTrue(any("repite literalmente" in x for x in errores))
+        self.assertTrue(any("genérico" in x for x in errores))
+
+    def test_una_fecha_justificada_no_se_rechaza_por_heuristica(self):
+        historia = (
+            "Ayer Daniel halló una carta: el papel llevaba escrito 2023, "
+            "pero la tinta fresca demostraba que alguien la escribió ayer."
+        )
+        errores = verificar_continuidad_entre_bloques(
+            "historia", historia, {"gancho": GANCHO_CORTO})
+        self.assertFalse(errores)
+
+    def test_cierre_concreto_distinto_del_desarrollo_pasa(self):
+        self.assertEqual(verificar_continuidad_entre_bloques(
+            "cierre", CIERRE_CORTO,
+            {"gancho": GANCHO_CORTO, "historia": HISTORIA_CORTA}), [])
+
+    def test_reanudar_undecima_no_conserva_historia_defectuosa(self):
+        informe = {
+            "guion_original": original(),
+            "historial_bloques": [
+                {"bloque": "gancho", "intento": 1, "texto": GANCHO_CORTO,
+                 "palabras": contar_palabras(GANCHO_CORTO),
+                 "longitud_valida": True,
+                 "aceptable_para_ensamblaje": True, "motivos_rechazo": []},
+                {"bloque": "historia", "intento": 1,
+                 "texto": HISTORIA_UNDECIMA,
+                 "palabras": contar_palabras(HISTORIA_UNDECIMA),
+                 "longitud_valida": True,
+                 "aceptable_para_ensamblaje": True, "motivos_rechazo": []},
+                {"bloque": "cierre", "intento": 1,
+                 "texto": CIERRE_UNDECIMA,
+                 "palabras": contar_palabras(CIERRE_UNDECIMA),
+                 "longitud_valida": True,
+                 "aceptable_para_ensamblaje": True, "motivos_rechazo": []},
+            ],
+        }
+        llamadas = []
+        textos = iter([HISTORIA_CORTA, CIERRE_CORTO])
+        def simular(prompt, modelo):
+            llamadas.append(prompt)
+            return next(textos)
+        salida = ensamblar_por_bloques(
+            original(), sesion_previa=informe, generador=simular)
+        self.assertEqual(salida["registros_recuperados"], 3)
+        self.assertEqual(len(llamadas), 2)
+        self.assertEqual(salida["guion"]["gancho"], GANCHO_CORTO)
+        self.assertEqual(salida["guion"]["historia"], HISTORIA_CORTA)
+        self.assertEqual(salida["guion"]["cierre"], CIERRE_CORTO)
+        self.assertFalse(salida["publicacion_automatica_autorizada"])
+        self.assertEqual(salida["historial_bloques"][:3],
+                         informe["historial_bloques"])
+
+    def test_cierre_repetido_se_rechaza_aunque_tenga_longitud_valida(self):
+        largo = (
+            "Daniel revisó la carta que estaba sobre la mesa junto a la ventana. "
+            "Después de varios minutos, encontró la respuesta a su pregunta."
+        )
+        # 2 frases: una compartida con la historia. Total fuera de rango
+        # no importa para verificar repetición entre bloques.
+        repetido = largo.split(". ")[0] + "."
+        problemas = verificar_continuidad_entre_bloques(
+            "cierre", repetido,
+            {"gancho": GANCHO_CORTO, "historia": largo})
+        self.assertTrue(any("repite literalmente" in e for e in problemas))
 
 
 
