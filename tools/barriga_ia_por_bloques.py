@@ -642,7 +642,8 @@ def ensamblar_por_bloques(original, duracion=35, modelo=MODELO,
                           premisa=None, sesion_previa=None,
                           palabras_por_minuto=150,
                           rechazar_historia_previa=False,
-                          indicaciones_editoriales=None):
+                          indicaciones_editoriales=None,
+                          reutilizar_borrador=False):
     """Máximo seis llamadas y ningún recorte ciego de frases/palabras.
 
     Preserva todos los intentos y produce guion completo SOLO si se
@@ -656,6 +657,8 @@ def ensamblar_por_bloques(original, duracion=35, modelo=MODELO,
         raise ErrorNarrativa("Se requiere un guion de partida")
     if estrategia_gancho not in ("modelo", "reglas-primero"):
         raise ErrorNarrativa("Estrategia de gancho desconocida")
+    if type(reutilizar_borrador) is not bool:
+        raise ErrorNarrativa("Reutilización de borrador debe ser booleana")
     evaluacion_original = evaluar_guion(original, duracion, palabras_por_minuto)
     if sesion_previa is not None and not isinstance(sesion_previa, dict):
         raise ErrorNarrativa("Sesión previa inválida")
@@ -759,6 +762,38 @@ def ensamblar_por_bloques(original, duracion=35, modelo=MODELO,
     for bloque in ("gancho", "historia", "cierre"):
         if bloque in aprobados:
             continue
+        # La primera inferencia ya propone los tres bloques; no volver a
+        # pedir a Ollama aquellos que superen las validaciones existentes.
+        # No usar esta optimización en una revisión de rechazo humano.
+        if reutilizar_borrador and not rechazar_historia_previa:
+            candidato = original.get(bloque)
+            minimo, maximo = limites[bloque]
+            if (isinstance(candidato, str)
+                    and minimo <= contar_palabras(candidato) <= maximo
+                    and not detectar_problemas_editoriales(
+                        candidato, original, bloque)
+                    and not verificar_continuidad_entre_bloques(
+                        bloque, candidato, aprobados)
+                    and not any(
+                        isinstance(r, dict) and r.get("bloque") == bloque
+                        and semejanza_narrativa(
+                            candidato, r.get("texto", "")) >= 0.90
+                        for r in rechazos
+                    )):
+                aprobados[bloque] = candidato
+                resultado["bloques_aprobados_en_longitud"][bloque] = (
+                    contar_palabras(candidato))
+                resultado["historial_bloques"].append({
+                    "bloque": bloque, "intento": 0, "texto": candidato,
+                    "palabras": contar_palabras(candidato),
+                    "limites": [minimo, maximo],
+                    "longitud_valida": True, "motivos_rechazo": [],
+                    "aceptable_para_ensamblaje": True,
+                    "origen": "BORRADOR_VALIDADO_LOCALMENTE",
+                    "nota": "Reutilizado, sin nueva llamada a Ollama; "
+                            "requiere revisión humana de causalidad",
+                })
+                continue
         previos = [x for x in resultado["historial_bloques"]
                    if isinstance(x, dict) and x.get("bloque") == bloque
                    and not x.get("aceptable_para_ensamblaje")]
