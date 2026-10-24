@@ -107,6 +107,10 @@
     workspace.classList.add("studio-workspace");
     creator.classList.add("studio-col", "studio-script");
     templates.classList.add("studio-col", "studio-templates");
+    const templateTitle = $("h2", templates);
+    if (templateTitle) templateTitle.textContent = "Plantillas";
+    const templateIntro = $("p", templates);
+    if (templateIntro) templateIntro.textContent = "Selecciona una estética para el proyecto";
     creator.insertBefore(create("p", "studio-section-sub", "Idea, formato y referencias"), $(".panel", creator));
     const panel = $(".panel", creator);
     const fields = $(".fields", panel);
