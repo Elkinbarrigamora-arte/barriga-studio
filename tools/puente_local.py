@@ -15,7 +15,7 @@ from urllib.error import HTTPError, URLError
 from barriga_ia_narrativa import ErrorNarrativa
 from barriga_ia_servicio_local import (
     ejecutar_motor, guardar_generacion, listar_generaciones,
-    abrir_generacion, inicializar,
+    abrir_generacion, inicializar, reanudar_cierre,
 )
 
 HOST = "127.0.0.1"
@@ -27,6 +27,7 @@ PANEL = r'''
  const token=__TOKEN__;
  const cabeceras={'X-Barriga-Token':token};
  let ultima=null;
+ let sePuedeReparar=false;
  function iniciar(){
    const field=document.getElementById('script');
    if(!field)return;
@@ -58,6 +59,11 @@ PANEL = r'''
    const btn=document.createElement('button');
    btn.type='button';btn.className='button';btn.style.margin='10px';
    btn.textContent='Generar y validar guion';
+   const reparar=document.createElement('button');
+   reparar.type='button';reparar.className='button ghost';
+   reparar.style.margin='8px';
+   reparar.textContent='Reparar solo cierre';
+   reparar.hidden=true;
    const msg=document.createElement('p');msg.className='muted';msg.setAttribute('role','status');
    msg.textContent='Escribe tu idea en Guion (arriba) y pulsa Generar. Requiere Ollama encendido.';
    const historial=document.createElement('select');
@@ -75,6 +81,8 @@ PANEL = r'''
       field.value=generado;
       field.dispatchEvent(new Event('input',{bubbles:true}));
       ultima=data.id;
+      sePuedeReparar=data.estado==='BLOQUE_RECHAZADO_CIERRE';
+      reparar.hidden=!sePuedeReparar;
       const msgEstado=data.apto_para_revision_humana ?
         'APTO PARA REVISION HUMANA (no publicado).' :
         'BORRADOR RECHAZADO O INCOMPLETO; revisar antes de utilizar.';
@@ -131,6 +139,23 @@ PANEL = r'''
       }catch(e){msg.textContent='Error: '+e.message}
       finally{btn.disabled=false}
    };
+   reparar.onclick=async()=>{
+      if(!sePuedeReparar||!ultima)return;
+      if(!confirm('¿Reintentar solo el cierre guardando una nueva versión? No se cambiarán el gancho ni la historia anteriores.'))return;
+      reparar.disabled=true;btn.disabled=true;
+      msg.textContent='Reanudando el cierre desde el historial, sin regenerar los otros bloques...';
+      try{
+         const resp=await fetch('/api/guion/reparar-cierre',{
+            method:'POST',headers:{...cabeceras,'Content-Type':'application/json'},
+            body:JSON.stringify({id:ultima})
+         });
+         const data=await resp.json();
+         if(!resp.ok)throw Error(data.error||('Error HTTP '+resp.status));
+         cargarGuion(data);
+         await refrescar();
+      }catch(e){msg.textContent='Reparación no completada: '+e.message}
+      finally{reparar.disabled=false;btn.disabled=false}
+   };
    recuperar.onclick=async()=>{
       const id=historial.value;
       if(!id)return;
@@ -142,7 +167,7 @@ PANEL = r'''
         cargarGuion(data);
       }catch(e){msg.textContent='No se pudo recuperar: '+e.message}
    };
-   box.append(title,btn,restaurar,msg,historial,recuperar);
+   box.append(title,btn,reparar,restaurar,msg,historial,recuperar);
    field.parentElement.appendChild(box);
    refrescar().catch(e=>{msg.textContent='Historial no disponible: '+e.message});
  }
@@ -192,6 +217,7 @@ def presentar_generacion(resultado, ident):
         "modelo": resultado.get("modelo", ""),
         "segundos": resultado.get("segundos_inferencia", 0),
         "rendimiento": resultado.get("rendimiento", {}),
+        "reanudado_desde": resultado.get("reanudado_desde"),
     }
 
 
@@ -262,7 +288,8 @@ def servidor(studio, token, puerto, modelo, db):
             else:
                 self.send(404, {"error": "Ruta desconocida"})
         def do_POST(self):
-            if self.path != "/api/guion":
+            route = urlsplit(self.path).path
+            if route not in ("/api/guion", "/api/guion/reparar-cierre"):
                 return self.send(404, {"error": "Ruta desconocida"})
             if self.headers.get("Origin") != origin or \
                self.headers.get("X-Barriga-Token") != token:
@@ -276,9 +303,14 @@ def servidor(studio, token, puerto, modelo, db):
                 args = json.loads(self.rfile.read(size))
                 if not isinstance(args, dict):
                     return self.send(400, {"error": "La solicitud debe ser un objeto JSON"})
-                idea = args.get("idea", "")
-                if not isinstance(idea, str) or not 2 <= len(idea.strip()) <= 2400:
-                    return self.send(400, {"error": "Escribe una idea entre 2 y 2400 caracteres"})
+                if route == "/api/guion":
+                    idea = args.get("idea", "")
+                    if not isinstance(idea, str) or not 2 <= len(idea.strip()) <= 2400:
+                        return self.send(400, {"error": "Escribe una idea entre 2 y 2400 caracteres"})
+                else:
+                    ident = args.get("id", "")
+                    if not isinstance(ident, str) or len(ident) != 23:
+                        return self.send(400, {"error": "Identificador de generación inválido"})
                 # Un único trabajo de inferencia evita saturar la GPU y
                 # ejecutar generaciones duplicadas simultáneamente.
                 if not generacion_libre.acquire(blocking=False):
@@ -287,7 +319,11 @@ def servidor(studio, token, puerto, modelo, db):
                                  "Espera a que termine antes de iniciar uno nuevo."
                     })
                 try:
-                    resultado = guion(idea.strip(), modelo, db)
+                    if route == "/api/guion/reparar-cierre":
+                        reparado, nuevo_id = reanudar_cierre(ident, modelo, db)
+                        resultado = presentar_generacion(reparado, nuevo_id)
+                    else:
+                        resultado = guion(idea.strip(), modelo, db)
                 finally:
                     generacion_libre.release()
                 self.send(200, resultado)
