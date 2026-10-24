@@ -216,7 +216,7 @@ PANEL = r'''
          estadoVista.textContent='SIN GENERACIÓN NUEVA · No se envió ninguna solicitud a Ollama.';
          return;
       }
-      if(/\\bGANCHO\\b[\\s\\S]*\\bHISTORIA\\b[\\s\\S]*\\bCIERRE\\b/i.test(idea)){
+      if(/\bGANCHO\b[\s\S]*\bHISTORIA\b[\s\S]*\bCIERRE\b/i.test(idea)){
          msg.textContent='El campo contiene un guion completo, no una premisa. Recupera la idea original del registro antes de generar.';
          estadoVista.textContent='SIN GENERACIÓN NUEVA · No se envió ninguna solicitud a Ollama.';
          return;
