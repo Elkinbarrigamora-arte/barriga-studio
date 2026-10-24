@@ -80,6 +80,8 @@ PANEL = r'''
         'BORRADOR RECHAZADO O INCOMPLETO; revisar antes de utilizar.';
       const motivos=Array.isArray(data.motivos_fidelidad)?
         data.motivos_fidelidad.join('; '):'';
+      const rechazos=Array.isArray(data.motivos_bloque)?
+        data.motivos_bloque.filter(x=>typeof x==='string').join('; '):'';
       const perf=data.rendimiento||{};
       const detalle=(typeof perf.llamadas_ollama==='number')?
         (' · Ollama: '+perf.llamadas_ollama+' llamadas'
@@ -88,7 +90,8 @@ PANEL = r'''
            ' · '+perf.tokens_por_segundo+' tokens/s':''))
         :'';
       msg.textContent=msgEstado+' ID: '+data.id+'. Estado: '+data.estado+
-        (motivos?'. Motivos: '+motivos:'')+'.'+detalle;
+        (motivos?'. Motivos: '+motivos:'')+
+        (rechazos?'. Rechazo del bloque: '+rechazos:'')+'.'+detalle;
    }
    async function refrescar(){
       const resp=await fetch('/api/historial',{headers:cabeceras});
@@ -152,6 +155,21 @@ PANEL = r'''
 
 def presentar_generacion(resultado, ident):
     guion = resultado.get("guion") or {}
+    informe = resultado.get("informe") or {}
+    estado = str(resultado.get("estado", "INCOMPLETO"))
+    motivos_bloque = []
+    if estado.startswith("BLOQUE_RECHAZADO_"):
+        nombre = estado[len("BLOQUE_RECHAZADO_"):].lower()
+        historial = informe.get("historial_bloques", [])
+        if isinstance(historial, list):
+            for paso in reversed(historial):
+                if isinstance(paso, dict) and paso.get("bloque") == nombre:
+                    motivos_bloque = paso.get("motivos_rechazo", [])
+                    break
+    if not isinstance(motivos_bloque, list):
+        motivos_bloque = []
+    motivos_bloque = [m[:220] for m in motivos_bloque
+                     if isinstance(m, str)][:4]
     return {
         "id": ident,
         "gancho": guion.get("gancho", ""),
@@ -166,6 +184,7 @@ def presentar_generacion(resultado, ident):
         "estado": resultado.get("estado", "INCOMPLETO"),
         "idea": resultado.get("idea", ""),
         "motivos_fidelidad": resultado.get("motivos_fidelidad", []),
+        "motivos_bloque": motivos_bloque,
         "apto_para_revision_humana": resultado.get(
             "apto_para_revision_humana", False),
         "aprobacion_humana": False,
