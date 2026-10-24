@@ -254,7 +254,7 @@ def prompt_para_bloque(nombre, original, generado, limites, anterior=None):
         # No mostrar el texto rechazado: en modelos pequeños ancla la salida
         # a la misma historia, incluso cuando se pide no repetirla.
         return (
-            "VERSION BREVE INDEPENDIENTE, SOLO {}. "
+            "PLAN ALTERNATIVO: VERSION BREVE INDEPENDIENTE, SOLO {}. "
             "Escribe {} a {} palabras en español, nunca más de {}. "
             "Usa únicamente personajes, fechas y hechos de la premisa. "
             "Completa el conflicto con acciones concretas y frases cerradas. "
