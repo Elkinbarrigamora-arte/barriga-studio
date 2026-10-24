@@ -16,6 +16,7 @@ from urllib.request import Request, urlopen
 OLLAMA_URL = "http://127.0.0.1:11434/api/generate"
 MODELO = "qwen2.5-coder:14b"
 NICHOS = {
+    "ficcion": "Ficción cinematográfica general: respetar estrictamente la premisa sin inventar géneros, personajes o conflictos ajenos.",
     "historia": "Relato histórico basado en hechos comprobables y contexto temporal.",
     "mitos": "Mitos y relatos tradicionales, distinguiendo creencia de hechos.",
     "leyendas": "Leyendas regionales con ambientación y tradición respetuosa.",
@@ -44,7 +45,7 @@ El espectador debe presenciar una revelación concreta, no un resumen de lo ocur
 Prefiere mostrar una acción de descubrimiento a explicar que «empezó a investigar».
 Evita palabras inventadas, repeticiones y faltas ortográficas.
 No repitas hechos; mantén personajes, apariencia, ropa y voz entre escenas.
-Las relaciones familiares deben concordar con la premisa: un hermano no se convierte en tío.
+Las relaciones familiares deben concordar con la premisa: no inventes nuevos parentescos.
 Describe acciones visibles y concretas, no resumas la historia con frases vagas.
 No inventes ubicaciones, vestuario ni personajes de relleno en la ficha continuidad.
 Separa siempre ficción, dramatización y hechos verificables. No inventes fuentes.
@@ -55,7 +56,7 @@ Responde EXCLUSIVAMENTE con un objeto JSON válido, sin marcas de Markdown,
 con campos: titulo, nicho, naturaleza, gancho, historia, cierre, personajes,
 continuidad, fuentes, duracion_objetivo_segundos.
 TIPOS JSON OBLIGATORIOS:
-"personajes": [{"nombre": "Daniel", "descripcion": "hermano mayor"}] o [];
+"personajes": [] o lista de objetos con claves nombre y descripcion; usa solamente personajes definidos por la premisa;
 "continuidad": {} o ficha SOLO con rasgos verdaderamente presentes en el guion;
 "fuentes": [] para ficción, o lista de referencias aportadas SIN INVENTAR;
 "duracion_objetivo_segundos": número entero, no texto.
@@ -151,7 +152,7 @@ def preparar_solicitud(tema, nicho, naturaleza="ficcion", duracion=35,
             "No inventar datos, citas, URLs o noticias",
             "No presentar ficción como información factual",
             "Mantener continuidad de personajes y escenario",
-            "Protagonista y hermano desaparecido deben conservar parentesco y nombre",
+            "Conservar parentescos y nombres definidos por la premisa; no inventarlos",
             "Resolver el conflicto con una acción/revelación concreta en el cierre",
             "Nunca concluir en términos vagos como 'resuelven el caso'",
             "Corregir ortografía, gramática y puntuación en español",
