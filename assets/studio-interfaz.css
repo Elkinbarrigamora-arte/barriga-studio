@@ -42,12 +42,13 @@ main{width:min(100%,1590px);max-width:none;margin:0 auto;padding:20px clamp(14px
  margin:6px 8px 0 0;padding:12px 22px;font-size:13px;text-transform:none;letter-spacing:.1px}
 .studio-cinematic>a.button.ghost{background:#0d1935d9;border-color:#7788ad}
 .studio-scene{position:absolute;inset:0 0 0 44%;pointer-events:none;overflow:hidden;z-index:0;
- background:radial-gradient(ellipse at 55% 52%,#fa9d4658,transparent 42%),
+ background:url('banner-personajes.svg') right bottom / contain no-repeat,
+ radial-gradient(ellipse at 55% 52%,#fa9d4658,transparent 42%),
  linear-gradient(0deg,#021025b8,transparent 65%)}
 .studio-city{position:absolute;bottom:0;left:-6%;right:0;height:42%;opacity:.85;
  background:repeating-linear-gradient(90deg,transparent 0 28px,#121d35 29px 51px,#101c32 52px 91px),
  linear-gradient(0deg,#040e1e,#27324b 75%,transparent);clip-path:polygon(0 43%,9% 43%,9% 26%,16% 26%,16% 61%,28% 61%,28% 17%,38% 17%,38% 47%,52% 47%,52% 24%,67% 24%,67% 52%,79% 52%,79% 14%,93% 14%,93% 45%,100% 45%,100% 100%,0 100%)}
-.studio-scene-fruits{position:absolute;inset:1% 0 4% 4%;display:flex;align-items:center;justify-content:space-evenly;
+.studio-scene-fruits{display:none;position:absolute;inset:1% 0 4% 4%;display:flex;align-items:center;justify-content:space-evenly;
  filter:drop-shadow(0 22px 14px #000d)}
 .studio-scene-fruit{font-size:clamp(100px,12vw,190px);line-height:1;transform:rotate(-8deg);
  text-shadow:5px 7px 0 #3c144a55,0 17px 28px #000}
