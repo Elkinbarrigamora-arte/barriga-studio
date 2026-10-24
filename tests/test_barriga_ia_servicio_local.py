@@ -522,6 +522,7 @@ class PuenteHTTPTest(unittest.TestCase):
         self.assertIn("Restaurar idea original", pagina)
         self.assertIn("Vista previa del resultado", pagina)
         self.assertIn("Usar este resultado en el editor", pagina)
+        self.assertIn("Recuperar idea original del registro", pagina)
         self.assertIn("ultimoResultado=data", pagina)
         self.assertIn("vista.textContent=generado", pagina)
         self.assertIn("clave-prueba", pagina)
@@ -543,6 +544,18 @@ class PuenteHTTPTest(unittest.TestCase):
         self.assertIn("if(!confirm(aviso))return", accion)
         self.assertIn("field.value=generado", accion)
         self.assertIn("field.dataset.ideaOriginal=idea", accion)
+
+    def test_recuperar_idea_del_registro_no_llama_a_ollama(self):
+        from puente_local import PANEL
+        accion = PANEL.split("   recuperarIdea.onclick=", 1)[1].split(
+            "   async function refrescar()", 1)[0]
+        self.assertIn("ultimoResultado.idea.trim()", accion)
+        self.assertIn("field.dataset.ideaOriginal=idea", accion)
+        self.assertIn("field.dataset.ultimoGuion=''", accion)
+        self.assertIn("field.value=idea", accion)
+        self.assertIn("if(actual&&actual!==idea&&", accion)
+        self.assertIn("!confirm(", accion)
+        self.assertNotIn("fetch(", accion)
 
     def test_historial_privado_por_token(self):
         status, _ = self.pedir("/api/historial")
