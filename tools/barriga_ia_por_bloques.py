@@ -257,7 +257,7 @@ def prompt_para_bloque(nombre, original, generado, limites, anterior=None):
             "No copies el intento fallido. ENTRE {} Y {} PALABRAS exactas; "
             "termina todas las oraciones con punto. Escribe acciones y "
             "consecuencias en secuencia. No agregues protagonistas, fechas "
-            'ni desenlaces ajenos a la premisa. Responde solo {"texto":"..."}. '
+            'ni desenlaces ajenos a la premisa. Responde solo {{"texto":"..."}}. '
             "Diagnóstico: "
         ).format(nombre.upper(), minimo, maximo) + json.dumps({
             "motivos_del_rechazo": anterior.get("motivos_rechazo", []),
