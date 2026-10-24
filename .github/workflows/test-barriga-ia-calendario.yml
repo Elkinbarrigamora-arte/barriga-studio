@@ -2,6 +2,11 @@ name: Pruebas Barriga IA calendario
 on:
   pull_request:
     paths:
+      - 'index.html'
+      - 'assets/studio-interfaz.css'
+      - 'assets/studio-interfaz.js'
+      - 'assets/studio-mejoras.js'
+      - 'tests/test_studio_interfaz.py'
       - 'tools/barriga_ia_calendario.py'
       - 'tests/test_barriga_ia_calendario.py'
       - 'tools/barriga_ia_narrativa.py'
