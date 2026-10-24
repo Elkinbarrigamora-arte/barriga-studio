@@ -374,7 +374,7 @@ def prompt_para_bloque(nombre, original, generado, limites, anterior=None):
                 "El intento previo fue rechazado por: "
                 + json.dumps(anterior.get("motivos_rechazo", []),
                              ensure_ascii=False)
-                + ". Escribe una sola oración con ENTRE {} Y {} PALABRAS. "
+                + ". Escribe una sola oración de {} a {} palabras. "
                   "Objetivo {} palabras exactas si es posible. "
                   "Resuelve la pregunta principal con UNA REVELACION "
                   "CONCRETA ya preparada en la historia: una acción, "
