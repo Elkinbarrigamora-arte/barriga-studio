@@ -33,6 +33,14 @@ PANEL = r'''
    box.style.cssText='padding:14px;margin:12px 0;border:1px solid #ab90ff;border-radius:12px;background:#14122c';
    const title=document.createElement('strong');
    title.textContent='🧠 BARRIGA IA · Guionista local verificado';
+   const ideaLabel=document.createElement('label');
+   ideaLabel.textContent='Idea original (se conserva sin cambios)';
+   ideaLabel.style.cssText='display:block;margin:10px 0 5px;font-weight:600';
+   const ideaInput=document.createElement('textarea');
+   ideaInput.rows=3;
+   ideaInput.placeholder='Escribe la premisa original de tu historia...';
+   ideaInput.style.cssText='display:block;width:100%;padding:10px;box-sizing:border-box;'+
+      'border:1px solid #8772bd;border-radius:8px;background:#201c3a;color:#fff';
    const btn=document.createElement('button');
    btn.type='button';btn.className='button';btn.style.margin='10px';
    btn.textContent='Generar y validar guion';
@@ -50,6 +58,7 @@ PANEL = r'''
       field.value=partes.join('\n');
       field.dispatchEvent(new Event('input',{bubbles:true}));
       ultima=data.id;
+      if(data.idea)ideaInput.value=data.idea;
       const msgEstado=data.apto_para_revision_humana ?
         'APTO PARA REVISION HUMANA (no publicado).' :
         'BORRADOR RECHAZADO O INCOMPLETO; revisar antes de utilizar.';
@@ -72,8 +81,8 @@ PANEL = r'''
       if(ultima)historial.value=ultima;
    }
    btn.onclick=async()=>{
-      const idea=field.value.trim()||(document.getElementById('name')?.value.trim()||'');
-      if(!idea){msg.textContent='Primero escribe una idea o un nombre.';return}
+      const idea=ideaInput.value.trim();
+      if(!idea){msg.textContent='Primero escribe la idea en el campo Idea original.';return}
       if(field.value.trim()&&!confirm('¿Reemplazar lo que hay en el editor? Guarda el proyecto antes.'))return;
       btn.disabled=true;msg.textContent='Ollama está generando y revisando los tres bloques...';
       try{
@@ -98,7 +107,7 @@ PANEL = r'''
         cargarGuion(data);
       }catch(e){msg.textContent='No se pudo recuperar: '+e.message}
    };
-   box.append(title,document.createElement('br'),btn,msg,historial,recuperar);
+   box.append(title,ideaLabel,ideaInput,btn,msg,historial,recuperar);
    field.parentElement.appendChild(box);
    refrescar().catch(e=>{msg.textContent='Historial no disponible: '+e.message});
  }
