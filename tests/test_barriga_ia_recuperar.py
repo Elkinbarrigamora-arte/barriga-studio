@@ -159,6 +159,24 @@ class TestRecuperacion(unittest.TestCase):
                 self.assertEqual(result["evaluacion"]["velocidad_narracion_ppm"], 160)
                 self.assertFalse(result["publicacion_automatica_autorizada"])
 
+    def test_prompt_incluye_motivos_especificos_del_rechazo(self):
+        registro, historia, cierre = fixture()
+        registro["historial_bloques"][-1]["motivos_rechazo"] = [
+            "Extensión 123 palabras fuera de 63 a 70",
+            "Respuesta repetida literalmente tras un rechazo",
+        ]
+        with tempfile.TemporaryDirectory() as directory:
+            fuente = Path(directory) / "sexta.json"
+            fuente.write_text(json.dumps(registro), encoding="utf-8")
+            reg, orig, hist, aprobados, limites = cargar_sexta(fuente, 35)
+            prompts = []
+            def simular(prompt, modelo):
+                prompts.append(prompt)
+                return historia if len(prompts) == 1 else cierre
+            reanudar(reg, orig, hist, aprobados, limites, generador=simular)
+            self.assertIn("Extensión 123 palabras", prompts[0])
+            self.assertIn("Respuesta repetida literalmente", prompts[0])
+
     def test_no_reinventar_personajes_en_control_heuristico(self):
         reg, historia, _ = fixture()
         razones = validar_bloque("Daniel habló con Camilo.", "historia",
