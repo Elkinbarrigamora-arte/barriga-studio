@@ -42,6 +42,65 @@ def _canon(palabra):
     return NUMEROS.get(palabra, palabra)
 
 
+
+PARENTESCOS = ("hermano", "hermana", "padre", "madre", "hijo", "hija",
+               "esposo", "esposa", "novio", "novia", "amigo", "amiga")
+DESAPARICIONES = ("desaparecido", "desaparecida", "desaparecio",
+                  "desaparecieron", "extraviado", "extraviada")
+CLIMAX = {
+    "liber": "liberar", "revel": "revelar",
+    "rescat": "rescatar", "arrest": "arrestar",
+    "captur": "capturar", "salv": "salvar",
+}
+
+
+def _relacion_vinculada_a_desaparicion(texto, parentesco):
+    """No confundir mención de un familiar con quién ha desaparecido.
+
+    Heurística conservadora: un familiar y la desaparición deben compartir
+    una cláusula, sin otro parentesco que se convierta en protagonista.
+    """
+    normal = "".join(
+        c for c in unicodedata.normalize("NFD", texto.casefold())
+        if unicodedata.category(c) != "Mn"
+    )
+    for clausula in re.split(r"[.!?;\n]+", normal):
+        tokens = re.findall(r"[a-z0-9]+", clausula)
+        for i, palabra in enumerate(tokens):
+            if palabra != parentesco:
+                continue
+            # «su hermano Carlos, que había desaparecido hace 20 años».
+            for j in range(i + 1, min(len(tokens), i + 9)):
+                if tokens[j] in PARENTESCOS and tokens[j] != parentesco:
+                    break
+                if tokens[j] in DESAPARICIONES:
+                    return True
+            # «desapareció su hermano».
+            for j in range(max(0, i - 4), i):
+                if tokens[j] in DESAPARICIONES and not any(
+                        x in PARENTESCOS and x != parentesco
+                        for x in tokens[j + 1:i]):
+                    return True
+    return False
+
+
+def _relaciones_desaparecidas_en_premisa(idea):
+    """Extraer sucesos familiares explícitos; no inferir parentescos nuevos."""
+    return [p for p in PARENTESCOS
+            if _relacion_vinculada_a_desaparicion(idea, p)]
+
+
+def _acciones_terminales(texto):
+    tokens = normalizar(texto)
+    return {etiqueta for raiz, etiqueta in CLIMAX.items()
+            if any(token.startswith(raiz) for token in tokens)}
+
+
+def _repeticion_de_cierre(historia, cierre):
+    compartidas = _acciones_terminales(historia) & _acciones_terminales(cierre)
+    return sorted(compartidas) if len(compartidas) >= 2 else []
+
+
 def auditar_fidelidad(idea, guion):
     """Lista de rechazos detectables; lista vacía NO es aprobación semántica."""
     if not isinstance(idea, str) or not isinstance(guion, dict):
@@ -87,4 +146,16 @@ def auditar_fidelidad(idea, guion):
                 "Duración temporal omitida: {} {}".format(numero, unidad))
     if "¿" in gancho or ("?" in gancho and "¿" not in gancho):
         problemas.append("Gancho interrogativo dirigido al espectador")
+    for parentesco in _relaciones_desaparecidas_en_premisa(idea):
+        if not _relacion_vinculada_a_desaparicion(
+                " ".join(partes), parentesco):
+            problemas.append(
+                "Cambio de protagonista del suceso: en la premisa quien "
+                "desaparece es su {}, pero el relato no conserva "
+                "ese hecho".format(parentesco))
+    repetidas = _repeticion_de_cierre(historia, cierre)
+    if repetidas:
+        problemas.append(
+            "El cierre repite acciones ya resueltas en la historia: "
+            + ", ".join(repetidas))
     return list(dict.fromkeys(problemas))
