@@ -82,6 +82,7 @@ def run():
 
             verify("Editor de cuatro columnas", page.locator(".studio-workspace > section").count() == 4)
             verify("Tres plantillas seleccionables", page.locator(".studio-template-card").count() == 3)
+            verify("Franja de cuatro beneficios reales", page.locator(".studio-benefit").count() == 4)
             page.locator(".studio-template-card").nth(1).get_by_role(
                 "button", name="Usar plantilla").click()
             page.wait_for_timeout(150)
