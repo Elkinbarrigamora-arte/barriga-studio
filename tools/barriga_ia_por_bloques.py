@@ -767,6 +767,13 @@ def ensamblar_por_bloques(original, duracion=35, modelo=MODELO,
         exitoso = False
         for numero in range(1, max_intentos + 1):
             prompt = prompt_para_bloque(bloque, original, aprobados, limites, previo)
+            if premisa:
+                prompt += ("\nPREMISA INMUTABLE DEL AUTOR: "
+                           + json.dumps(premisa, ensure_ascii=False)
+                           + "\nConserva literalmente sus hechos centrales, "
+                             "objetos importantes y pistas temporales. "
+                             "No inventes otro conflicto ni reemplaces la trama. "
+                             "No hagas preguntas al espectador.")
             if indicaciones_editoriales and bloque != "gancho":
                 prompt += ("\nREVISION HUMANA OBLIGATORIA: "
                            + indicaciones_editoriales.strip()
