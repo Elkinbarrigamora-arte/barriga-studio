@@ -366,6 +366,29 @@ def prompt_para_bloque(nombre, original, generado, limites, anterior=None):
             "motivos_rechazo_previo": (
                 anterior.get("motivos_rechazo", []) if anterior else []),
         }
+        if anterior:
+            # El primer cierre fue rechazado: cambiar el encargo, no sólo
+            # la temperatura. Nunca reinyectar su texto defectuoso.
+            return (
+                "SEGUNDO INTENTO DE CIERRE, REFORMULACION BREVE. "
+                "El intento previo fue rechazado por: "
+                + json.dumps(anterior.get("motivos_rechazo", []),
+                             ensure_ascii=False)
+                + ". Escribe una sola oración con ENTRE {} Y {} PALABRAS. "
+                  "Objetivo {} palabras exactas si es posible. "
+                  "Resuelve la pregunta principal con UNA REVELACION "
+                  "CONCRETA ya preparada en la historia: una acción, "
+                  "prueba o consecuencia que se pueda visualizar. "
+                  "No inventes causas, criminales, lugares ni objetos "
+                  "que la historia no establezca. No uses moralejas "
+                  "abstractas ('verdadero héroe', 'vínculo familiar', "
+                  "'la verdad salió a la luz'). "
+                  "Si el misterio todavía no tiene explicación en la "
+                  "historia, no afirmes que ya está resuelto. "
+                  "Punto final obligatorio. "
+                  "Devuelve sólo JSON con la propiedad texto. DATOS: "
+            ).format(minimo, maximo, (minimo + maximo) // 2) + json.dumps(
+                datos_cierre, ensure_ascii=False)
         return (
             "ESCRIBE SOLAMENTE EL DESENLACE DE ESTE RELATO. "
             "UNA SOLA ORACION COMPLETA de {} a {} palabras; "
