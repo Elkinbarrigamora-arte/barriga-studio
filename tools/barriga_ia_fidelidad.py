@@ -175,10 +175,51 @@ def auditar_fidelidad(idea, guion):
                 "Cambio de protagonista del suceso: en la premisa quien "
                 "desaparece es su {}, pero el relato no conserva "
                 "ese hecho".format(parentesco))
+    # Si la premisa declara una desaparición familiar, la historia debe
+    # desarrollarla: mencionarla solo en GANCHO no constituye continuidad.
+    relaciones = _relaciones_desaparecidas_en_premisa(idea)
+    for parentesco in relaciones:
+        if not _relacion_vinculada_a_desaparicion(historia, parentesco):
+            problemas.append(
+                "Desarrollo incompleto: la HISTORIA no identifica a su "
+                "{} como la persona desaparecida".format(parentesco))
+    # Una duración expresada solo en GANCHO tampoco basta para explicar
+    # en la HISTORIA cuánto tiempo lleva desaparecido el familiar.
+    if relaciones:
+        historia_numeros = {_canon(p) for p in normalizar(historia)}
+        for j in range(len(original) - 1):
+            unidad = original[j + 1]
+            numero = concepto_original[j]
+            if unidad == "anos" and numero.isdecimal() and numero not in historia_numeros:
+                problemas.append(
+                    "Desarrollo incompleto: la HISTORIA omite la duración "
+                    "de {} años".format(numero))
+
     # Finales de autoelogio o giros inconcretos no resuelven un
     # misterio de desaparición. Una coincidencia es señal de rechazo
     # editorial, no sustituto de comprobar toda la causalidad.
     cierre_normalizado = " ".join(normalizar(cierre))
+    exige_revelacion = bool(relaciones) or any(
+        token in original for token in ("misterio", "verdad", "secreto"))
+    amenaza = bool(re.search(
+        r"\b(?:planeab\w*|querian|queria)\s+matarl\w*\b",
+        cierre_normalizado))
+    promesa = bool(re.search(
+        r"\bpromet\w*\s+proteg\w*\b", cierre_normalizado))
+    secreto_oculto = bool(re.search(
+        r"\b(?:un|el)\s+secreto\s+que\s+solo\b",
+        cierre_normalizado))
+    # Patrón deliberadamente restringido: no rechazar una revelación
+    # causal auténtica que explique la amenaza con una prueba o motivo.
+    explica_amenaza = bool(re.search(
+        r"\b(?:porque|debido|documento|prueba|firmo|firma|"
+        r"confeso|confesion|falsifico|culpable|orden|motivo)\b",
+        cierre_normalizado))
+    if exige_revelacion and (
+            secreto_oculto or (amenaza and promesa and not explica_amenaza)):
+        problemas.append(
+            "Cierre inconcluso: repite una amenaza o anuncia un secreto "
+            "sin revelar un hecho concreto que resuelva el misterio")
     if (re.search(r"\bverdadero heroe\b|\bheroe que siempre sono ser\b",
                   cierre_normalizado)
             or re.search(
