@@ -74,7 +74,8 @@ class MotorUnificadoTest(unittest.TestCase):
         self.assertIn("PREMISA INMUTABLE", crear.call_args[0][0])
         estructurar.assert_called_once_with(
             draft, duracion=35, modelo="modelo-local",
-            premisa="Una carta escrita ayer", reutilizar_borrador=True)
+            premisa="Una carta escrita ayer",
+            estrategia_gancho="reglas-primero", reutilizar_borrador=True)
         self.assertEqual(salida["rendimiento"]["llamadas_ollama"], 0)
         self.assertTrue(salida["apto_para_revision_humana"])
         self.assertFalse(salida["aprobacion_humana"])
