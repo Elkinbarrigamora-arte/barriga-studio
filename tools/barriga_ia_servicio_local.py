@@ -16,7 +16,9 @@ import time
 from barriga_ia_narrativa import (
     ErrorNarrativa, generar_local, preparar_solicitud,
 )
-from barriga_ia_por_bloques import ensamblar_por_bloques
+from barriga_ia_por_bloques import (
+    ensamblar_por_bloques, recuperar_bloques_aprobados, limites_de_bloques,
+)
 from barriga_ia_fidelidad import auditar_fidelidad
 from barriga_ia_acelerador import medir_solicitud, resumen
 
@@ -138,6 +140,70 @@ def _ejecutar_motor_impl(idea, modelo, duracion=35):
         "informe": dict(informe, intentos_borrador=intentos_borrador),
         "segundos_inferencia": round(time.monotonic() - inicio, 1),
     }
+
+
+
+def reanudar_cierre(ident, modelo, db=DEFAULT_DB):
+    """Reintentar SOLO el cierre de un guion fallido sin perder el original.
+
+    Recupera los bloques previamente aprobados y registra un nuevo resultado
+    independiente; nunca sobrescribe la generacion original.
+    """
+    anterior = abrir_generacion(ident, db)
+    if anterior is None:
+        raise ErrorNarrativa("No existe la generacion indicada")
+    if anterior.get("estado") != "BLOQUE_RECHAZADO_CIERRE":
+        raise ErrorNarrativa("Solo se puede reparar un cierre rechazado")
+    informe_previo = anterior.get("informe")
+    if not isinstance(informe_previo, dict):
+        raise ErrorNarrativa("La generacion no tiene un informe recuperable")
+    borrador = informe_previo.get("guion_original")
+    historial = informe_previo.get("historial_bloques")
+    if not isinstance(borrador, dict) or not isinstance(historial, list):
+        raise ErrorNarrativa("Faltan los bloques originales para continuar")
+    idea = anterior.get("idea")
+    duracion = anterior.get("duracion_objetivo", 35)
+    validar_solicitud(idea, duracion)
+    if not all(k in borrador for k in ("gancho", "historia", "cierre")):
+        raise ErrorNarrativa("El guion original esta incompleto")
+    aprobados = recuperar_bloques_aprobados(
+        informe_previo, borrador, limites_de_bloques(duracion))
+    if not all(k in aprobados for k in ("gancho", "historia")):
+        raise ErrorNarrativa(
+            "Los bloques previos no son recuperables; "
+            "no se iniciara una generacion completa")
+    inicio = time.monotonic()
+    with medir_solicitud() as llamadas:
+        informe = ensamblar_por_bloques(
+            borrador, duracion=duracion, modelo=modelo,
+            premisa=idea, sesion_previa=informe_previo)
+    completo = informe.get("guion")
+    final = completo if isinstance(completo, dict) else dict(borrador)
+    motivos = auditar_fidelidad(idea, final)
+    evaluacion = informe.get("evaluacion")
+    estado = ("PREMISA_DESVIADA" if motivos
+              else informe.get("estado", "INCOMPLETO"))
+    aceptable = bool(
+        not motivos and isinstance(evaluacion, dict)
+        and evaluacion.get("apto_para_revision_humana")
+        and estado == "REVISION_HUMANA_PENDIENTE")
+    resultado = {
+        "version": 2, "idea": idea, "modelo": modelo,
+        "duracion_objetivo": duracion, "estado": estado,
+        "motivos_fidelidad": motivos,
+        "apto_para_revision_humana": aceptable,
+        "aprobacion_humana": False,
+        "publicacion_automatica_autorizada": False,
+        "guion": final,
+        "guion_estructurado_completo": isinstance(completo, dict),
+        "evaluacion": evaluacion,
+        "informe": informe,
+        "reanudado_desde": ident,
+        "segundos_inferencia": round(time.monotonic() - inicio, 1),
+        "rendimiento": resumen(llamadas),
+    }
+    nuevo_id = guardar_generacion(resultado, db=db)
+    return resultado, nuevo_id
 
 
 def inicializar(db=DEFAULT_DB):
