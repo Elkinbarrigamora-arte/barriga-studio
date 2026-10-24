@@ -58,10 +58,17 @@ def _ejecutar_motor_impl(idea, modelo, duracion=35):
           "nuevos. Evita preguntas al espectador. "
           "Si una persona desaparece durante años y luego envía una carta, "
           "muestra con hechos por qué desapareció y cómo llegó esa carta. "
+          "En HISTORIA identifica sin ambigüedad QUIÉN desapareció, "
+          "qué parentesco tiene y la DURACIÓN EXACTA de la desaparición "
+          "según la premisa (20 años no puede volverse 'hace años'). "
+          "Conserva en el relato la pista 'ayer' si la premisa la contiene. "
           "Toda organización, conspiración o giro debe tener una causa "
-          "concreta y pistas visibles. El cierre debe revelar un hecho "
-          "comprobable dentro de la ficción, nunca solo llamar héroe "
-          "al protagonista o decir que existía una conspiración. "
+          "concreta y pistas visibles; evita introducir organizaciones "
+          "secretas genéricas o tramas nuevas para sustituir el misterio. "
+          "En CIERRE revela una prueba, motivo o hecho específico que "
+          "resuelva el misterio, sin repetir la amenaza de la HISTORIA "
+          "ni limitarte a prometer protección o anunciar un secreto. "
+          "No confundir una duración implícita con una fecha explícita. "
           "Devuelve JSON válido y respeta la duración."
     )
     intentos_borrador = []
@@ -71,10 +78,19 @@ def _ejecutar_motor_impl(idea, modelo, duracion=35):
         propuesta = generar_local(
             prompt if numero == 1 else (
                 prompt + "\nREINTENTO POR DESVIACION DE PREMISA. "
-                "La anterior salida fue RECHAZADA por: "
+                "La salida anterior se rechazó por: "
                 + "; ".join(razones)
-                + ". Reescribe desde la premisa original y cambia "
-                  "completamente la trama incorrecta."
+                + ". Vuelve a redactar desde la idea original, no desde "
+                  "el borrador defectuoso. Conserva expresamente en el "
+                  "GANCHO y la HISTORIA los hechos familiares y todas las "
+                  "cifras o cantidades temporales de la premisa. "
+                  "No sustituyas 'desaparecido hace veinte años' por "
+                  "'secuestrado hace años', si la premisa especifica veinte. "
+                  "Desarrolla una sola cadena de causa, pista y hallazgo. "
+                  "No inventes organizaciones o conspiraciones para "
+                  "justificar la desaparición sin explicar su papel. "
+                  "El CIERRE debe revelar un hecho concreto que no se "
+                  "haya contado ya en la HISTORIA."
             ),
             modelo=modelo,
             temperatura=0.25 if numero == 1 else 0.4
