@@ -79,6 +79,41 @@ class PruebasPorBloques(unittest.TestCase):
         self.assertFalse(salida["publicacion_automatica_autorizada"])
         self.assertEqual(len(salida["historial_bloques"]), 3)
 
+    def test_aceleracion_reutiliza_borrador_valido_sin_ollama(self):
+        draft = original()
+        draft.update(gancho=GANCHO_CORTO,
+                     historia=HISTORIA_CORTA,
+                     cierre=CIERRE_CORTO)
+        llamadas = []
+        def modelo(prompt, modelo):
+            llamadas.append(prompt)
+            raise AssertionError("No repetir inferencia validada")
+        salida = ensamblar_por_bloques(
+            draft, generador=modelo, reutilizar_borrador=True)
+        self.assertEqual(llamadas, [])
+        self.assertEqual(salida["estado"], "REVISION_HUMANA_PENDIENTE")
+        self.assertEqual(salida["guion"]["historia"], HISTORIA_CORTA)
+        self.assertEqual(
+            [x["origen"] for x in salida["historial_bloques"]],
+            ["BORRADOR_VALIDADO_LOCALMENTE"] * 3)
+
+    def test_aceleracion_solo_regenera_bloque_defectuoso(self):
+        draft = original()
+        draft.update(gancho=GANCHO_CORTO, cierre=CIERRE_CORTO)
+        llamadas = []
+        def modelo(prompt, modelo):
+            llamadas.append(prompt)
+            return HISTORIA_CORTA
+        salida = ensamblar_por_bloques(
+            draft, generador=modelo, reutilizar_borrador=True)
+        self.assertEqual(len(llamadas), 1)
+        self.assertEqual(salida["guion"]["historia"], HISTORIA_CORTA)
+        self.assertEqual(salida["estado"], "REVISION_HUMANA_PENDIENTE")
+        self.assertEqual(
+            [x["origen"] for x in salida["historial_bloques"]
+             if x["bloque"] in ("gancho", "cierre")],
+            ["BORRADOR_VALIDADO_LOCALMENTE"] * 2)
+
     def test_reintenta_solamente_el_bloque_fuera_de_rango(self):
         respuestas = iter([
             "Daniel encontró ayer una carta que su hermano desaparecido había escrito hace mucho tiempo.",
