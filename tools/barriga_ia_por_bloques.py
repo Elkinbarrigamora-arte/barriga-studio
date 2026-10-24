@@ -15,6 +15,7 @@ from pathlib import Path
 import sys
 from urllib.error import URLError
 from urllib.request import Request, urlopen
+from barriga_ia_acelerador import iniciar_llamada, finalizar_llamada
 
 from barriga_ia_narrativa import (
     MODELO, OLLAMA_URL, ErrorNarrativa, contar_palabras, evaluar_guion,
@@ -428,13 +429,16 @@ def generar_texto_local(prompt, modelo=MODELO, timeout=150,
         headers={"Content-Type": "application/json"},
         method="POST",
     )
+    llamada = iniciar_llamada(modelo, "ajuste_de_bloque")
     try:
         with urlopen(req, timeout=timeout) as resp:
             envelope = json.loads(resp.read().decode("utf-8"))
     except (URLError, OSError, TimeoutError, ValueError, TypeError) as exc:
+        finalizar_llamada(llamada, error=True)
         raise ErrorNarrativa(
             "Error de conexión o respuesta HTTP de Ollama local: " + str(exc)
         ) from exc
+    finalizar_llamada(llamada, envelope)
     if not isinstance(envelope, dict):
         raise ErrorNarrativa("Ollama devolvió una respuesta HTTP no estructurada")
     respuesta = envelope.get("response")
