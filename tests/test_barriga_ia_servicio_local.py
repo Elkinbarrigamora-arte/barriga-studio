@@ -368,6 +368,36 @@ class PuenteHTTPTest(unittest.TestCase):
             "REVISION_HUMANA_PENDIENTE")
         generar.assert_called_once()
 
+    def test_no_permite_dos_generaciones_simultaneas(self):
+        primera_inicio = threading.Event()
+        primera_fin = threading.Event()
+        resultados = []
+        origin = "http://127.0.0.1:{}".format(self.port)
+
+        def lenta(idea, modelo):
+            primera_inicio.set()
+            primera_fin.wait(timeout=3)
+            return resultado_mock()
+
+        def primera():
+            resultados.append(self.pedir(
+                "/api/guion", "POST", {"idea": "Una carta misteriosa"},
+                token="clave-prueba", origin=origin))
+        with patch("puente_local.ejecutar_motor", side_effect=lenta):
+            hilo = threading.Thread(target=primera)
+            hilo.start()
+            try:
+                self.assertTrue(primera_inicio.wait(timeout=2))
+                estado, cuerpo = self.pedir(
+                    "/api/guion", "POST", {"idea": "Otra historia diferente"},
+                    token="clave-prueba", origin=origin)
+                self.assertEqual(estado, 429)
+                self.assertIn("otro guion", cuerpo)
+            finally:
+                primera_fin.set()
+                hilo.join(timeout=4)
+        self.assertEqual(resultados[0][0], 200)
+
     def test_get_ruta_desconocida_y_header_antiframe(self):
         status, _ = self.pedir("/api/desconocido")
         self.assertEqual(status, 404)
