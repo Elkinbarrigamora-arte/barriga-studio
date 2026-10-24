@@ -54,6 +54,12 @@ def _ejecutar_motor_impl(idea, modelo, duracion=35):
           "temporales de esa premisa son OBLIGATORIOS. "
           "No sustituyas cartas por ríos, objetos mágicos ni conflictos "
           "nuevos. Evita preguntas al espectador. "
+          "Si una persona desaparece durante años y luego envía una carta, "
+          "muestra con hechos por qué desapareció y cómo llegó esa carta. "
+          "Toda organización, conspiración o giro debe tener una causa "
+          "concreta y pistas visibles. El cierre debe revelar un hecho "
+          "comprobable dentro de la ficción, nunca solo llamar héroe "
+          "al protagonista o decir que existía una conspiración. "
           "Devuelve JSON válido y respeta la duración."
     )
     intentos_borrador = []
