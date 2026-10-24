@@ -67,6 +67,10 @@ PANEL = r'''
    reparar.style.display='none';
    const msg=document.createElement('p');msg.className='muted';msg.setAttribute('role','status');
    msg.textContent='Escribe tu idea en Guion (arriba) y pulsa Generar. Requiere Ollama encendido.';
+   const estadoVista=document.createElement('p');
+   estadoVista.setAttribute('role','status');
+   estadoVista.style.cssText='font-weight:700;white-space:pre-wrap;padding:8px 0';
+   estadoVista.textContent='Sin resultados cargados en esta sesión.';
    const vista=document.createElement('pre');
    vista.setAttribute('aria-label','Vista previa del resultado, no sustituye el guion original');
    vista.style.cssText='display:none;white-space:pre-wrap;overflow-wrap:anywhere;padding:12px;border:1px solid #555;border-radius:10px;max-height:350px;overflow:auto';
@@ -84,7 +88,11 @@ PANEL = r'''
    const recuperar=document.createElement('button');
    recuperar.type='button';recuperar.className='button ghost';recuperar.style.margin='8px';
    recuperar.textContent='Recuperar guion';
-   function cargarGuion(data){
+   function cargarGuion(data,origen='historial'){
+      const tipo=origen==='nueva'?'NUEVA GENERACIÓN':
+        origen==='reparacion'?'NUEVA REPARACIÓN':'REGISTRO RECUPERADO DEL HISTORIAL';
+      estadoVista.textContent=tipo+' · ID: '+(data.id||'no informado')+
+        ' · Estado: '+(data.estado||'no informado');
       const guion=data.guion||{};
       const partes=['GANCHO',guion.gancho||'','', 'HISTORIA',guion.historia||'',
                     '', 'CIERRE',guion.cierre||''];
@@ -169,30 +177,43 @@ PANEL = r'''
       const generado=(field.dataset.ultimoGuion||'').trim();
       const idea=(generado&&texto===generado)?
         (field.dataset.ideaOriginal||'').trim():texto;
-      if(!idea){msg.textContent='Primero escribe la idea en el campo Guion.';return}
+      if(!idea){
+        msg.textContent='No se generó nada: el campo Guion está vacío. Recupera la idea original del historial o escribe una nueva.';
+        estadoVista.textContent='SIN GENERACIÓN NUEVA · El resultado visible es anterior.';
+        return;
+      }
       if(idea.length>2400){
-        msg.textContent='La idea no puede superar 2400 caracteres. Acórtala antes de generar.';
+        msg.textContent='No se generó nada: la idea supera 2400 caracteres. Acórtala antes de generar.';
+        estadoVista.textContent='SIN GENERACIÓN NUEVA · El resultado visible es anterior.';
         return;
       }
       if(generado&&texto===generado&&
          !confirm('¿Generar otra versión desde la idea original? Se reemplazará el guion visible.'))return;
       field.dataset.ideaOriginal=idea;
-      btn.disabled=true;msg.textContent='Ollama está generando y revisando los tres bloques...';
+      btn.disabled=true;
+      recuperar.disabled=true;
+      reparar.disabled=true;
+      estadoVista.textContent='GENERACIÓN EN CURSO · Lo que se ve abajo es una versión anterior, NO el resultado nuevo.';
+      msg.textContent='Ollama está generando y revisando los tres bloques...';
       try{
          const resp=await fetch('/api/guion',{method:'POST',headers:{
               ...cabeceras,'Content-Type':'application/json'},
               body:JSON.stringify({idea})});
          const data=await resp.json();
          if(!resp.ok)throw Error(data.error||('Error HTTP '+resp.status));
-         cargarGuion(data);
+         cargarGuion(data,'nueva');
          await refrescar();
-      }catch(e){msg.textContent='Error: '+e.message}
-      finally{btn.disabled=false}
+      }catch(e){
+         estadoVista.textContent='SIN GENERACIÓN NUEVA · Falló el intento. La vista previa es anterior.';
+         msg.textContent='Error: '+e.message;
+      }
+      finally{btn.disabled=false;recuperar.disabled=false;reparar.disabled=false}
    };
    reparar.onclick=async()=>{
       if(!sePuedeReparar||!ultima)return;
       if(!confirm('¿Reintentar solo el cierre guardando una nueva versión? No se cambiarán el gancho ni la historia anteriores.'))return;
-      reparar.disabled=true;btn.disabled=true;
+      reparar.disabled=true;btn.disabled=true;recuperar.disabled=true;
+      estadoVista.textContent='REPARACIÓN EN CURSO · Se muestra la versión anterior hasta recibir la nueva.';
       msg.textContent='Reanudando el cierre desde el historial, sin regenerar los otros bloques...';
       try{
          const resp=await fetch('/api/guion/reparar-cierre',{
@@ -201,10 +222,13 @@ PANEL = r'''
          });
          const data=await resp.json();
          if(!resp.ok)throw Error(data.error||('Error HTTP '+resp.status));
-         cargarGuion(data);
+         cargarGuion(data,'reparacion');
          await refrescar();
-      }catch(e){msg.textContent='Reparación no completada: '+e.message}
-      finally{reparar.disabled=false;btn.disabled=false}
+      }catch(e){
+         estadoVista.textContent='SIN REPARACIÓN NUEVA · La vista previa sigue siendo anterior.';
+         msg.textContent='Reparación no completada: '+e.message;
+      }
+      finally{reparar.disabled=false;btn.disabled=false;recuperar.disabled=false}
    };
    recuperar.onclick=async()=>{
       const id=historial.value;
@@ -214,10 +238,10 @@ PANEL = r'''
         const resp=await fetch('/api/guion/'+encodeURIComponent(id),{headers:cabeceras});
         const data=await resp.json();
         if(!resp.ok)throw Error(data.error||'No encontrada');
-        cargarGuion(data);
+        cargarGuion(data,'historial');
       }catch(e){msg.textContent='No se pudo recuperar: '+e.message}
    };
-   box.append(title,btn,reparar,restaurar,msg,vista,usar,recuperarIdea,historial,recuperar);
+   box.append(title,btn,reparar,restaurar,msg,estadoVista,vista,usar,recuperarIdea,historial,recuperar);
    field.parentElement.appendChild(box);
    refrescar().catch(e=>{msg.textContent='Historial no disponible: '+e.message});
  }
