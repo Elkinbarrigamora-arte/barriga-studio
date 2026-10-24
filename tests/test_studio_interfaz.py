@@ -38,6 +38,13 @@ class StudioVisualStructureTest(unittest.TestCase):
         self.assertNotIn("localStorage.clear(", JS)
         self.assertNotIn("localStorage.removeItem(KEY)", JS)
 
+    def test_respaldo_preserva_idea_original_y_guion_previo(self):
+        self.assertIn('const ideaOriginal = String(project.ideaOriginal', MEJORAS)
+        self.assertIn('const ultimoGuion = String(project.ultimoGuion', MEJORAS)
+        self.assertIn('name, script, ideaOriginal, ultimoGuion', MEJORAS)
+        self.assertIn('p.ideaOriginal, p.ultimoGuion', MEJORAS)
+        self.assertNotIn('.slice(0, 30000)', MEJORAS)
+
     def test_four_columns_and_responsive_breakpoints(self):
         self.assertIn("grid-template-columns:minmax(0,27fr) minmax(0,40fr) minmax(0,16fr) minmax(0,17fr)", CSS)
         for bound in ("1070px", "680px"):
