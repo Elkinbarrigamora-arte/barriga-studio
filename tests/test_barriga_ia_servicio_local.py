@@ -520,9 +520,29 @@ class PuenteHTTPTest(unittest.TestCase):
         self.assertIn("field.dataset.ideaOriginal", pagina)
         self.assertIn("const idea=(generado&&texto===generado)?", pagina)
         self.assertIn("Restaurar idea original", pagina)
+        self.assertIn("Vista previa del resultado", pagina)
+        self.assertIn("Usar este resultado en el editor", pagina)
+        self.assertIn("ultimoResultado=data", pagina)
+        self.assertIn("vista.textContent=generado", pagina)
         self.assertIn("clave-prueba", pagina)
         self.assertEqual((self.studio / "index.html").read_text(),
                          "<html><body>Studio</body></html>")
+
+    def test_borrador_rechazado_no_sustituye_guion_en_editor(self):
+        # Aislar el callback que recibe el resultado: solo actualiza la vista.
+        from puente_local import PANEL
+        carga = PANEL.split("function cargarGuion(data){", 1)[1].split(
+            "   usar.onclick=", 1)[0]
+        self.assertIn("vista.textContent=generado", carga)
+        self.assertIn("ultimoResultado=data", carga)
+        self.assertNotIn("field.value=", carga)
+        self.assertNotIn("field.dataset.ideaOriginal=", carga)
+        # La única sustitución se hace después de pulsar y confirmar.
+        accion = PANEL.split("   usar.onclick=", 1)[1].split(
+            "   async function refrescar()", 1)[0]
+        self.assertIn("if(!confirm(aviso))return", accion)
+        self.assertIn("field.value=generado", accion)
+        self.assertIn("field.dataset.ideaOriginal=idea", accion)
 
     def test_historial_privado_por_token(self):
         status, _ = self.pedir("/api/historial")
