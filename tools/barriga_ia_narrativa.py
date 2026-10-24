@@ -225,8 +225,10 @@ def normalizar_formato(guion):
     return limpio, ajustes
 
 
-def evaluar_guion(guion, duracion=35):
+def evaluar_guion(guion, duracion=35, palabras_por_minuto=150):
     """Puntajes deterministas para orientar revisión, NO predicen viralidad."""
+    if type(palabras_por_minuto) is not int or not 120 <= palabras_por_minuto <= 210:
+        raise ErrorNarrativa("Velocidad de narración fuera de rango: 120 a 210 ppm")
     if not isinstance(guion, dict):
         raise ErrorNarrativa("La respuesta debe ser un objeto JSON")
     if not isinstance(duracion, int) or not 20 <= duracion <= 60:
@@ -250,7 +252,7 @@ def evaluar_guion(guion, duracion=35):
 
     palabras = {k: contar_palabras(guion[k]) for k in ESTRUCTURA}
     total = sum(palabras.values())
-    estimacion = round(total / 2.5, 1)  # Aproximación: locución de 150 palabras/minuto.
+    estimacion = round(total * 60 / palabras_por_minuto, 1)  # Aproximación configurable.
     gancho = min(25, (16 if 3 <= palabras["gancho"] <= 18 else 7)
                  + (9 if any(c in guion["gancho"] for c in ("?", "¡", "!", "…", ":")) else 3))
     historia = min(30, (20 if 35 <= palabras["historia"] <= 120 else 9)
@@ -328,6 +330,7 @@ def evaluar_guion(guion, duracion=35):
         "desglose": puntajes,
         "palabras": total,
         "segundos_estimados": estimacion,
+        "palabras_por_minuto": palabras_por_minuto,
         "duracion_objetivo": duracion,
         "bloqueos": bloqueos,
         "advertencias": advertencias,
