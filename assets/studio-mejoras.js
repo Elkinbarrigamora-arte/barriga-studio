@@ -29,18 +29,22 @@
   };
   const clean = (project) => {
     if (!project || typeof project !== "object" || Array.isArray(project)) return null;
-    const name = String(project.name || "Proyecto sin título").slice(0, 150).trim();
-    const script = String(project.script || "").slice(0, 30000);
+    const name = String(project.name || "Proyecto sin título").trim();
+    // La importación debe conservar el texto original completo, sin truncamientos.
+    const script = String(project.script || "");
+    const ideaOriginal = String(project.ideaOriginal || project.script || "");
+    const ultimoGuion = String(project.ultimoGuion || "");
     const style = styles.includes(project.style) ? project.style : styles[0];
     const format = formats.includes(project.format) ? project.format : formats[0];
     const duration = durations.includes(project.duration) ? project.duration : durations[0];
     const voice = voices.includes(project.voice) ? project.voice : voices[0];
     const date = String(project.date || stamp()).slice(0, 100);
     return { id: (typeof project.id === "number" || typeof project.id === "string") ?
-      project.id : uniqueId(), name, script, style, format, duration, voice, date };
+      project.id : uniqueId(), name, script, ideaOriginal, ultimoGuion,
+      style, format, duration, voice, date };
   };
   const fingerprint = (p) => JSON.stringify([
-    p.name, p.script, p.style, p.format, p.duration, p.voice
+    p.name, p.script, p.ideaOriginal, p.ultimoGuion, p.style, p.format, p.duration, p.voice
   ]);
   const status = (message, error = false) => {
     const el = document.getElementById("respaldo-status");
