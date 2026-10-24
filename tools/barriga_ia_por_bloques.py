@@ -76,6 +76,17 @@ def detectar_problemas_editoriales(texto, original, bloque, anterior=None):
             original_texto, flags=re.IGNORECASE | re.UNICODE
         ):
             problemas.append("Posible personaje o nombre nuevo: " + nombre)
+    # Los nombres al principio de una oración normalmente se ignoran para
+    # evitar falsos positivos ("Entonces", "Extrañado", etc.). Sin embargo,
+    # una aposición típica ("Pepe, siempre rebelde, ...") sugiere un personaje.
+    for coincide in re.finditer(
+            r"\b([A-ZÁÉÍÓÚÑ][a-záéíóúñ]{2,})\s*,\s*"
+            r"(?:siempre|quien|cuyo|cuya|su|sus)\b", sin_citas):
+        nombre = coincide.group(1)
+        if not re.search(
+                r"(?<!\w)" + re.escape(nombre) + r"(?!\w)",
+                original_texto, flags=re.IGNORECASE | re.UNICODE):
+            problemas.append("Posible personaje o nombre nuevo: " + nombre)
     if bloque == "gancho":
         origen = (str(original.get("gancho", "")) + " " +
                   str(original.get("historia", ""))[:350]).casefold()
