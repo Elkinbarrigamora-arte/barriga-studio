@@ -81,7 +81,9 @@ def detectar_problemas_editoriales(texto, original, bloque, anterior=None):
     # una aposición típica ("Pepe, siempre rebelde, ...") sugiere un personaje.
     for coincide in re.finditer(
             r"\b([A-ZÁÉÍÓÚÑ][a-záéíóúñ]{2,})\s*,\s*"
-            r"(?:siempre|quien|cuyo|cuya|su|sus)\b", sin_citas):
+            r"(?:siempre|quien|cuyo|cuya|su|sus|rebelde|culpable|" 
+            r"inocente|asustad[oa]|nervios[oa]|sorprendid[oa]|"
+            r"arrepentid[oa]|desesperad[oa])\b", sin_citas):
         nombre = coincide.group(1)
         if not re.search(
                 r"(?<!\w)" + re.escape(nombre) + r"(?!\w)",
@@ -132,6 +134,58 @@ def detectar_problemas_editoriales(texto, original, bloque, anterior=None):
     if re.search(r"\b(\w+)(?:\s+\1){3,}\b", texto, re.IGNORECASE | re.UNICODE):
         problemas.append("Repetición mecánica de palabras consecutivas")
     # Mantener únicos los avisos.
+    return list(dict.fromkeys(problemas))
+
+
+
+def verificar_continuidad_entre_bloques(bloque, texto, aprobados):
+    """Rechazar indicios observables de discontinuidad entre secciones.
+
+    No sustituye lectura editorial humana, ni infiere si las causas o
+    revelaciones son creíbles. Solo exige coherencia temporal explícita
+    ante fechas contradictorias y finales distintos del desarrollo.
+    """
+    problemas = []
+    if bloque == "historia":
+        gancho = aprobados.get("gancho", "").casefold()
+        historia = texto.casefold()
+        # Si el gancho promete una carta escrita ayer, no reemplazar
+        # esa pista con una fecha absoluta antigua sin explicarla.
+        if (re.search(r"\bcarta\b", gancho)
+                and re.search(r"\bayer\b", gancho)
+                and re.search(r"\b(?:19|20)\d{2}\b", historia)
+                and not re.search(
+                    r"\bayer\b|\banoche\b|\bv[ií]spera\b|"
+                    r"\bd[ií]a anterior\b|\bhace (?:un|1) d[ií]a\b",
+                    historia)):
+            problemas.append(
+                "Continuidad temporal: el gancho promete una carta de ayer "
+                "y la historia introduce un año sin explicar esa pista")
+    elif bloque == "cierre":
+        historia = aprobados.get("historia", "")
+        if historia:
+            frases_historia = [
+                re.sub(r"\s+", " ", x).strip(" ,.;:!?¡¿…\"“”'‘’").casefold()
+                for x in re.split(r"(?<=[.!?…])\s+", historia)
+                if x.strip()
+            ]
+            frases_cierre = [
+                re.sub(r"\s+", " ", x).strip(" ,.;:!?¡¿…\"“”'‘’").casefold()
+                for x in re.split(r"(?<=[.!?…])\s+", texto)
+                if x.strip()
+            ]
+            if any(c == h for c in frases_cierre for h in frases_historia
+                   if c and len(c.split()) >= 5):
+                problemas.append(
+                    "El cierre repite literalmente una oración de la historia")
+        if re.search(
+                r"\b(?:el secreto era un engaño|"
+                r"la verdad sali[oó] a la luz|"
+                r"todo fue una mentira|"
+                r"la revelaci[oó]n resolvi[oó])\b",
+                texto.casefold()):
+            problemas.append(
+                "Cierre genérico: no explica una revelación concreta de la historia")
     return list(dict.fromkeys(problemas))
 
 
@@ -212,7 +266,10 @@ def prompt_para_bloque(nombre, original, generado, limites, anterior=None):
             "borrador_de_desarrollo": original.get("historia", "")[:1600],
             "instruccion": (
                 "Acciones visibles, secuencia causal, conserva parentescos y "
-                "el mismo misterio; prepara un desenlace revelador."
+                "el mismo misterio; prepara un desenlace revelador. "
+                "Explica la pista temporal del gancho; si dice que la "
+                "carta fue escrita ayer, no la sustituyas por un año "
+                "antiguo. No resuelvas el misterio antes del cierre."
             ),
         }
     elif nombre == "cierre":
@@ -311,6 +368,9 @@ def prompt_para_bloque(nombre, original, generado, limites, anterior=None):
             "la historia. Resuelve o revela algo ya preparado en "
             "el desarrollo aprobado. NO introduzcas personajes, "
             "objetos, lugares, delitos ni tramas ajenos al desarrollo. "
+            "No repitas ninguna frase del desarrollo. Evita frases "
+            "como 'la verdad salió a la luz' o 'el secreto era un engaño'; "
+            "revela cuál fue la causa concreta. "
             "Cierra con punto. Cuenta antes de entregar. "
             'RESPONDE SOLO JSON {{"texto":"..."}}. DATOS: '
         ).format(minimo, maximo, (minimo + maximo) // 2) + json.dumps(
@@ -436,6 +496,8 @@ def recuperar_bloques_aprobados(sesion, original, limites):
         if not menor <= contar_palabras(texto) <= mayor:
             continue
         if detectar_problemas_editoriales(texto, original, nombre):
+            continue
+        if verificar_continuidad_entre_bloques(nombre, texto, aprobados):
             continue
         if nombre == "historia" and "gancho" not in aprobados:
             continue
@@ -595,7 +657,8 @@ def ensamblar_por_bloques(original, duracion=35, modelo=MODELO,
         "evaluacion": None,
         "estado": "INCOMPLETO",
         "publicacion_automatica_autorizada": False,
-        "nota": "Control de longitud, no verificación semántica ni prueba de viralidad",
+        "nota": "Control de longitud y reglas editoriales parciales; "
+                "NO equivale a validación semántica humana ni prueba de viralidad",
     }
     aprobados = recuperar_bloques_aprobados(sesion_previa, original, limites) if sesion_previa else {}
     resultado["bloques_aprobados_en_longitud"] = {k: contar_palabras(v) for k, v in aprobados.items()}
@@ -680,6 +743,8 @@ def ensamblar_por_bloques(original, duracion=35, modelo=MODELO,
                         palabras, minimo, maximo)]
                 motivos += detectar_problemas_editoriales(
                     texto, original, bloque, previo)
+                motivos += verificar_continuidad_entre_bloques(
+                    bloque, texto, aprobados)
                 if normalizar_comparacion(texto) and any(
                     normalizar_comparacion(texto) == normalizar_comparacion(t)
                     for t in rechazos_anteriores if isinstance(t, str)
