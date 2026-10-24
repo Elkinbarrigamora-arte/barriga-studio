@@ -148,6 +148,8 @@
       previewPanel.append(frame);
     }
     [...panel.querySelectorAll(":scope > p")].forEach((p) => previewPanel.append(p));
+    const saveButton = [...previewPanel.querySelectorAll('button')].find(b => b.textContent.trim() === 'Guardar proyecto');
+    if (saveButton) saveButton.textContent = 'Guardar en Mis proyectos';
     const header = create("div", "studio-panel-top");
     header.append(create("span", "", "Historia"));
     const chars = create("span", "studio-char-count", "0 caracteres");
@@ -353,7 +355,7 @@
       const script = $("#script");
       if (script && script.value.trim() && !confirm(
         "¿Crear un nuevo proyecto? Guarda primero los cambios actuales que quieras conservar.")) return;
-      if (typeof window.activeId !== "undefined") window.activeId = null;
+      if (typeof activeId !== "undefined") activeId = null;
       ["name", "script", "reference"].forEach(id => {
         const input = document.getElementById(id);
         if (input) input.value = "";
