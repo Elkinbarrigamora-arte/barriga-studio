@@ -33,11 +33,6 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
-      - name: Validar calendario y narrativa sin publicar
+      - name: Validar todo el proyecto sin publicar
         run: |
-          python -m unittest discover -s tests -p 'test_barriga_ia_calendario.py' -v
-          python -m unittest discover -s tests -p 'test_barriga_ia_narrativa.py' -v
-          python -m unittest discover -s tests -p 'test_barriga_ia_por_bloques.py' -v
-          python -m unittest discover -s tests -p 'test_barriga_ia_recuperar.py' -v
-          python -m unittest discover -s tests -p 'test_barriga_ia_continuar.py' -v
-          python -m unittest discover -s tests -p 'test_barriga_ia_servicio_local.py' -v
+          python -m unittest discover -s tests -v
