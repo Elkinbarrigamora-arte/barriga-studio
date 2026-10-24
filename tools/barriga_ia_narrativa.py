@@ -12,6 +12,7 @@ import re
 import sys
 from urllib.error import URLError
 from urllib.request import Request, urlopen
+from barriga_ia_acelerador import iniciar_llamada, finalizar_llamada
 
 OLLAMA_URL = "http://127.0.0.1:11434/api/generate"
 MODELO = "qwen2.5-coder:14b"
@@ -356,11 +357,14 @@ def generar_local(prompt, modelo=MODELO, timeout=180, devolver_ajustes=False,
     req = Request(OLLAMA_URL,
                   json.dumps(payload, ensure_ascii=False).encode("utf-8"),
                   {"Content-Type": "application/json"}, method="POST")
+    llamada = iniciar_llamada(modelo, "borrador_completo")
     try:
         with urlopen(req, timeout=timeout) as resp:
             result = json.loads(resp.read().decode("utf-8"))
     except (URLError, TimeoutError, OSError, ValueError) as exc:
+        finalizar_llamada(llamada, error=True)
         raise ErrorNarrativa("No se pudo consultar Ollama local: " + str(exc)) from exc
+    finalizar_llamada(llamada, result)
     if not isinstance(result, dict) or not isinstance(result.get("response"), str):
         raise ErrorNarrativa("Respuesta de Ollama sin campo 'response'")
     try:
