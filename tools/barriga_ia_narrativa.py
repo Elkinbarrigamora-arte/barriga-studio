@@ -12,10 +12,12 @@ import re
 import sys
 from urllib.error import URLError
 from urllib.request import Request, urlopen
+from barriga_ia_acelerador import iniciar_llamada, finalizar_llamada
 
 OLLAMA_URL = "http://127.0.0.1:11434/api/generate"
 MODELO = "qwen2.5-coder:14b"
 NICHOS = {
+    "ficcion": "Ficción cinematográfica general: respetar estrictamente la premisa sin inventar géneros, personajes o conflictos ajenos.",
     "historia": "Relato histórico basado en hechos comprobables y contexto temporal.",
     "mitos": "Mitos y relatos tradicionales, distinguiendo creencia de hechos.",
     "leyendas": "Leyendas regionales con ambientación y tradición respetuosa.",
@@ -44,7 +46,7 @@ El espectador debe presenciar una revelación concreta, no un resumen de lo ocur
 Prefiere mostrar una acción de descubrimiento a explicar que «empezó a investigar».
 Evita palabras inventadas, repeticiones y faltas ortográficas.
 No repitas hechos; mantén personajes, apariencia, ropa y voz entre escenas.
-Las relaciones familiares deben concordar con la premisa: un hermano no se convierte en tío.
+Las relaciones familiares deben concordar con la premisa: no inventes nuevos parentescos.
 Describe acciones visibles y concretas, no resumas la historia con frases vagas.
 No inventes ubicaciones, vestuario ni personajes de relleno en la ficha continuidad.
 Separa siempre ficción, dramatización y hechos verificables. No inventes fuentes.
@@ -55,7 +57,7 @@ Responde EXCLUSIVAMENTE con un objeto JSON válido, sin marcas de Markdown,
 con campos: titulo, nicho, naturaleza, gancho, historia, cierre, personajes,
 continuidad, fuentes, duracion_objetivo_segundos.
 TIPOS JSON OBLIGATORIOS:
-"personajes": [{"nombre": "Daniel", "descripcion": "hermano mayor"}] o [];
+"personajes": [] o lista de objetos con claves nombre y descripcion; usa solamente personajes definidos por la premisa;
 "continuidad": {} o ficha SOLO con rasgos verdaderamente presentes en el guion;
 "fuentes": [] para ficción, o lista de referencias aportadas SIN INVENTAR;
 "duracion_objetivo_segundos": número entero, no texto.
@@ -151,7 +153,7 @@ def preparar_solicitud(tema, nicho, naturaleza="ficcion", duracion=35,
             "No inventar datos, citas, URLs o noticias",
             "No presentar ficción como información factual",
             "Mantener continuidad de personajes y escenario",
-            "Protagonista y hermano desaparecido deben conservar parentesco y nombre",
+            "Conservar parentescos y nombres definidos por la premisa; no inventarlos",
             "Resolver el conflicto con una acción/revelación concreta en el cierre",
             "Nunca concluir en términos vagos como 'resuelven el caso'",
             "Corregir ortografía, gramática y puntuación en español",
@@ -225,8 +227,10 @@ def normalizar_formato(guion):
     return limpio, ajustes
 
 
-def evaluar_guion(guion, duracion=35):
+def evaluar_guion(guion, duracion=35, palabras_por_minuto=150):
     """Puntajes deterministas para orientar revisión, NO predicen viralidad."""
+    if type(palabras_por_minuto) is not int or not 120 <= palabras_por_minuto <= 210:
+        raise ErrorNarrativa("Velocidad de narración fuera de rango: 120 a 210 ppm")
     if not isinstance(guion, dict):
         raise ErrorNarrativa("La respuesta debe ser un objeto JSON")
     if not isinstance(duracion, int) or not 20 <= duracion <= 60:
@@ -250,7 +254,7 @@ def evaluar_guion(guion, duracion=35):
 
     palabras = {k: contar_palabras(guion[k]) for k in ESTRUCTURA}
     total = sum(palabras.values())
-    estimacion = round(total / 2.5, 1)  # Aproximación: locución de 150 palabras/minuto.
+    estimacion = round(total * 60 / palabras_por_minuto, 1)  # Aproximación configurable.
     gancho = min(25, (16 if 3 <= palabras["gancho"] <= 18 else 7)
                  + (9 if any(c in guion["gancho"] for c in ("?", "¡", "!", "…", ":")) else 3))
     historia = min(30, (20 if 35 <= palabras["historia"] <= 120 else 9)
@@ -328,6 +332,7 @@ def evaluar_guion(guion, duracion=35):
         "desglose": puntajes,
         "palabras": total,
         "segundos_estimados": estimacion,
+        "palabras_por_minuto": palabras_por_minuto,
         "duracion_objetivo": duracion,
         "bloqueos": bloqueos,
         "advertencias": advertencias,
@@ -352,11 +357,14 @@ def generar_local(prompt, modelo=MODELO, timeout=180, devolver_ajustes=False,
     req = Request(OLLAMA_URL,
                   json.dumps(payload, ensure_ascii=False).encode("utf-8"),
                   {"Content-Type": "application/json"}, method="POST")
+    llamada = iniciar_llamada(modelo, "borrador_completo")
     try:
         with urlopen(req, timeout=timeout) as resp:
             result = json.loads(resp.read().decode("utf-8"))
     except (URLError, TimeoutError, OSError, ValueError) as exc:
+        finalizar_llamada(llamada, error=True)
         raise ErrorNarrativa("No se pudo consultar Ollama local: " + str(exc)) from exc
+    finalizar_llamada(llamada, result)
     if not isinstance(result, dict) or not isinstance(result.get("response"), str):
         raise ErrorNarrativa("Respuesta de Ollama sin campo 'response'")
     try:

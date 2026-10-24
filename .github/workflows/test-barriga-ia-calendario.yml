@@ -2,12 +2,26 @@ name: Pruebas Barriga IA calendario
 on:
   pull_request:
     paths:
+      - 'index.html'
+      - 'assets/studio-interfaz.css'
+      - 'assets/banner-personajes.svg'
+      - 'tests/smoke_studio_chromium.py'
+      - 'tests/studio_browser_interactions.py'
+      - 'assets/studio-interfaz.js'
+      - 'assets/studio-mejoras.js'
+      - 'tests/test_studio_interfaz.py'
       - 'tools/barriga_ia_calendario.py'
       - 'tests/test_barriga_ia_calendario.py'
       - 'tools/barriga_ia_narrativa.py'
       - 'tools/barriga_ia_por_bloques.py'
       - 'tools/barriga_ia_recuperar.py'
       - 'tools/barriga_ia_continuar.py'
+      - 'tools/barriga_ia_fidelidad.py'
+      - 'tools/barriga_ia_mejora_continua.py'
+      - 'tests/test_barriga_ia_mejora_continua.py'
+      - 'tools/barriga_ia_servicio_local.py'
+      - 'tools/puente_local.py'
+      - 'tests/test_barriga_ia_servicio_local.py'
       - 'tests/test_barriga_ia_narrativa.py'
       - 'tests/test_barriga_ia_por_bloques.py'
       - 'tests/test_barriga_ia_recuperar.py'
@@ -30,10 +44,27 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
-      - name: Validar calendario y narrativa sin publicar
+      - name: Validar todo el proyecto sin publicar
         run: |
-          python -m unittest discover -s tests -p 'test_barriga_ia_calendario.py' -v
-          python -m unittest discover -s tests -p 'test_barriga_ia_narrativa.py' -v
-          python -m unittest discover -s tests -p 'test_barriga_ia_por_bloques.py' -v
-          python -m unittest discover -s tests -p 'test_barriga_ia_recuperar.py' -v
-          python -m unittest discover -s tests -p 'test_barriga_ia_continuar.py' -v
+          python -m unittest discover -s tests -v
+      - name: Verificar controles con Chromium y proyectos de prueba aislados
+        if: matrix.python-version == '3.11'
+        run: |
+          python -m pip install playwright==1.57.0
+          python tests/studio_browser_interactions.py
+      - name: Capturar interfaz real en escritorio y móvil
+        if: matrix.python-version == '3.11'
+        run: python tests/smoke_studio_chromium.py --output evidencia-ui
+      - name: Empaquetar los archivos de interfaz auditados
+        if: matrix.python-version == '3.11'
+        run: |
+          mkdir -p evidencia-ui/fuente/assets
+          cp index.html evidencia-ui/fuente/index.html
+          cp assets/studio-mejoras.js assets/studio-interfaz.js assets/studio-interfaz.css assets/banner-personajes.svg evidencia-ui/fuente/assets/
+      - name: Conservar capturas para auditoría
+        if: always() && matrix.python-version == '3.11'
+        uses: actions/upload-artifact@v4
+        with:
+          name: studio-ui-evidencia
+          path: evidencia-ui/
+          if-no-files-found: warn

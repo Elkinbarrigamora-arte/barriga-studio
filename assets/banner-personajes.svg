@@ -1,0 +1,87 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="940" height="430" viewBox="0 0 940 430" role="img" aria-labelledby="title desc">
+<title id="title">Personajes cinematográficos originales de Barriga Studio</title>
+<desc id="desc">Una fresa expresiva, una piña luminosa, una naranja sonriente y un personaje de estilo anime con cabello rojo ante una ciudad al atardecer.</desc>
+<defs>
+ <radialGradient id="sky" cx=".65" cy=".38" r=".67"><stop stop-color="#f6a666" stop-opacity=".56"/><stop offset=".45" stop-color="#6c315f" stop-opacity=".25"/><stop offset="1" stop-color="#060d22" stop-opacity="0"/></radialGradient>
+ <radialGradient id="berry" cx=".27" cy=".2" r=".92"><stop stop-color="#ff8b80"/><stop offset=".38" stop-color="#ef3657"/><stop offset=".82" stop-color="#9e0b3d"/><stop offset="1" stop-color="#440b34"/></radialGradient>
+ <radialGradient id="pine" cx=".27" cy=".2" r=".94"><stop stop-color="#fff0a2"/><stop offset=".34" stop-color="#f5c455"/><stop offset=".7" stop-color="#d77b25"/><stop offset="1" stop-color="#70401b"/></radialGradient>
+ <radialGradient id="orange" cx=".22" cy=".2" r=".85"><stop stop-color="#fff2ab"/><stop offset=".26" stop-color="#ffb544"/><stop offset=".74" stop-color="#e7662e"/><stop offset="1" stop-color="#78334a"/></radialGradient>
+ <linearGradient id="leaf" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#adf87a"/><stop offset=".55" stop-color="#2eaf71"/><stop offset="1" stop-color="#0c534f"/></linearGradient>
+ <linearGradient id="hair" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#ff8f75"/><stop offset=".35" stop-color="#dc2f5d"/><stop offset=".8" stop-color="#82265f"/><stop offset="1" stop-color="#331342"/></linearGradient>
+ <linearGradient id="coat" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#4b74b5"/><stop offset=".6" stop-color="#162d63"/><stop offset="1" stop-color="#070e32"/></linearGradient>
+ <radialGradient id="skin" cx=".4" cy=".25" r=".93"><stop stop-color="#ffe3bd"/><stop offset=".55" stop-color="#edb59c"/><stop offset="1" stop-color="#b46d85"/></radialGradient>
+ <filter id="shadow" x="-.6" y="-.6" width="2.2" height="2.2"><feGaussianBlur stdDeviation="13"/></filter>
+ <filter id="glow" x="-.4" y="-.4" width="1.8" height="1.8"><feDropShadow dx="0" dy="13" stdDeviation="11" flood-color="#03071a" flood-opacity=".9"/></filter>
+ <pattern id="seeds" width="25" height="28" patternUnits="userSpaceOnUse"><ellipse cx="11" cy="14" rx="3" ry="5" fill="#ffd28e" transform="rotate(-25 11 14)" opacity=".9"/></pattern>
+ <pattern id="mesh" width="31" height="31" patternUnits="userSpaceOnUse"><path d="M-8 8L23 39M8 -8L39 23M-8 23L23 -8M8 39L39 8" stroke="#975324" stroke-opacity=".4" stroke-width="3" fill="none"/></pattern>
+</defs>
+<rect width="940" height="430" fill="url(#sky)"/>
+<ellipse cx="480" cy="410" rx="390" ry="36" fill="#03091b" opacity=".83" filter="url(#shadow)"/>
+<g fill="#07162c" opacity=".62">
+<path d="M0 370V290h34v-61h45v49h32v-95h55v115h41v-44h44v116z"/>
+<path d="M545 374v-60h35v-62h28v61h41v-113h63v77h35v-61h49v119h36v-86h55v121z"/>
+</g>
+<g transform="translate(160 68)" filter="url(#glow)">
+ <!-- Strawberry leaves -->
+ <path d="M60 56Q15 10 23 3Q48 7 74 34Q66-3 81-20Q94-13 96 36Q117 0 146 9Q151 24 112 52Q162 47 159 66Q139 79 103 67L71 69Z" fill="url(#leaf)" stroke="#205d4d" stroke-width="4"/>
+ <path d="M91 35Q86 11 102 -12" fill="none" stroke="#73ef90" stroke-width="7" stroke-linecap="round"/>
+ <!-- strawberry body -->
+ <path d="M24 76Q30 40 84 48Q149 39 165 86Q173 138 142 213Q120 267 88 289Q60 267 36 219Q8 151 24 76Z" fill="url(#berry)" stroke="#6d153e" stroke-width="6"/>
+ <path d="M24 76Q30 40 84 48Q149 39 165 86Q173 138 142 213Q120 267 88 289Q60 267 36 219Q8 151 24 76Z" fill="url(#seeds)" opacity=".5"/>
+ <path d="M42 84Q49 57 91 61" fill="none" stroke="#ffd7cf" stroke-opacity=".55" stroke-width="17" stroke-linecap="round"/>
+ <!-- expressive face -->
+ <ellipse cx="62" cy="145" rx="17" ry="20" fill="#fff1eb"/><ellipse cx="122" cy="143" rx="17" ry="20" fill="#fff1eb"/>
+ <ellipse cx="66" cy="149" rx="9" ry="14" fill="#25203e"/><ellipse cx="119" cy="149" rx="9" ry="14" fill="#25203e"/>
+ <circle cx="70" cy="143" r="4" fill="#fff"/><circle cx="123" cy="144" r="4" fill="#fff"/>
+ <path d="M74 198Q91 221 113 195" fill="none" stroke="#480c30" stroke-width="6" stroke-linecap="round"/>
+ <circle cx="48" cy="188" r="10" fill="#ffb4b3" opacity=".5"/><circle cx="131" cy="183" r="10" fill="#ffb4b3" opacity=".5"/>
+ <!-- arms and shoes -->
+ <path d="M23 148Q-10 155 -18 118M160 149Q179 130 187 105" stroke="#bd3157" stroke-width="16" stroke-linecap="round" fill="none"/>
+ <path d="M68 276L59 315M115 271L129 318" stroke="#452d62" stroke-width="15" stroke-linecap="round"/>
+ <ellipse cx="49" cy="315" rx="28" ry="13" fill="#19223d"/><ellipse cx="137" cy="319" rx="29" ry="13" fill="#19223d"/>
+</g>
+<g transform="translate(365 56)" filter="url(#glow)">
+ <!-- crown leaves -->
+ <path d="M75 77Q25 29 26 1Q58 11 83 45Q58 -15 86 -34Q105 -16 109 43Q127 -21 153 -16Q161 5 123 61Q166 15 182 29Q181 52 143 82Z" fill="url(#leaf)" stroke="#145b4d" stroke-width="4"/>
+ <path d="M80 55Q111 35 142 63" stroke="#a8f9b6" stroke-width="5" fill="none" opacity=".6"/>
+ <ellipse cx="110" cy="181" rx="90" ry="129" fill="url(#pine)" stroke="#995328" stroke-width="6"/>
+ <ellipse cx="110" cy="181" rx="89" ry="128" fill="url(#mesh)"/>
+ <path d="M51 111Q58 88 90 81" stroke="#fff1c6" stroke-width="17" stroke-linecap="round" fill="none" opacity=".48"/>
+ <path d="M40 158Q9 158 -6 120M179 161Q209 134 222 101" stroke="#d9963d" stroke-width="16" stroke-linecap="round" fill="none"/>
+ <ellipse cx="78" cy="169" rx="19" ry="23" fill="#fff7e6"/><ellipse cx="147" cy="169" rx="19" ry="23" fill="#fff7e6"/>
+ <ellipse cx="80" cy="171" rx="10" ry="15" fill="#332635"/><ellipse cx="145" cy="171" rx="10" ry="15" fill="#332635"/>
+ <circle cx="83" cy="164" r="4" fill="#fff"/><circle cx="149" cy="164" r="4" fill="#fff"/>
+ <path d="M87 231Q113 252 137 230" fill="none" stroke="#673724" stroke-width="7" stroke-linecap="round"/>
+ <path d="M85 300L81 335M141 298L147 336" stroke="#574057" stroke-width="15" stroke-linecap="round"/>
+ <ellipse cx="70" cy="335" rx="28" ry="12" fill="#131a36"/><ellipse cx="157" cy="337" rx="28" ry="12" fill="#131a36"/>
+</g>
+<g transform="translate(563 214) scale(.74)" filter="url(#glow)">
+ <path d="M65 12Q96 -9 129 14" stroke="#2b995e" stroke-width="14" fill="none" stroke-linecap="round"/>
+ <circle cx="106" cy="109" r="91" fill="url(#orange)" stroke="#a44f30" stroke-width="6"/>
+ <path d="M47 76Q60 44 85 39" stroke="#fff0bd" stroke-width="14" fill="none" stroke-linecap="round" opacity=".5"/>
+ <ellipse cx="73" cy="99" rx="14" ry="17" fill="#fff9eb"/><ellipse cx="142" cy="99" rx="14" ry="17" fill="#fff9eb"/>
+ <ellipse cx="76" cy="101" rx="8" ry="11" fill="#31263d"/><ellipse cx="141" cy="101" rx="8" ry="11" fill="#31263d"/>
+ <path d="M87 148Q107 166 129 146" stroke="#662539" fill="none" stroke-width="7" stroke-linecap="round"/>
+ <path d="M32 112L-1 98M180 117L209 95" stroke="#dd762f" fill="none" stroke-width="16" stroke-linecap="round"/>
+</g>
+<g transform="translate(684 40)" filter="url(#glow)">
+ <!-- coat and shoulders -->
+ <path d="M39 248Q66 221 98 224L134 223Q190 228 206 274L230 400H5L21 296Z" fill="url(#coat)" stroke="#0b173f" stroke-width="5"/>
+ <path d="M100 222L116 275L135 223" fill="#e6d5d2"/>
+ <path d="M116 271L135 398H108L108 289Z" fill="#8f2b68"/>
+ <!-- red hair back silhouette -->
+ <path d="M60 110Q35 58 71 16Q115 -19 166 13Q210 42 190 113L215 183L181 153L202 237L159 200L70 213L26 248L50 160L18 181Z" fill="url(#hair)" stroke="#551b4f" stroke-width="6"/>
+ <!-- neck and face -->
+ <path d="M100 192L96 248Q116 263 146 243L140 192Z" fill="url(#skin)"/>
+ <path d="M69 87Q78 40 127 43Q176 45 182 96L172 176Q164 218 122 224Q84 217 75 184Z" fill="url(#skin)" stroke="#a45c7d" stroke-width="4"/>
+ <!-- upper hair locks -->
+ <path d="M56 114Q42 52 80 20Q146 -13 188 51L178 92Q165 62 141 52L124 108L118 61Q97 102 72 110L51 171Z" fill="url(#hair)" stroke="#722253" stroke-width="4"/>
+ <path d="M73 63Q99 29 136 26" stroke="#ffb198" stroke-width="9" stroke-linecap="round" fill="none" opacity=".64"/>
+ <path d="M83 133Q101 125 113 133M139 135Q151 127 167 136" stroke="#6b284d" stroke-width="5" stroke-linecap="round" fill="none"/>
+ <ellipse cx="100" cy="151" rx="12" ry="17" fill="#f7f7ff"/><ellipse cx="151" cy="151" rx="12" ry="17" fill="#f7f7ff"/>
+ <ellipse cx="102" cy="152" rx="7" ry="13" fill="#2d507e"/><ellipse cx="149" cy="152" rx="7" ry="13" fill="#2d507e"/>
+ <circle cx="104" cy="148" r="3.5" fill="#fff"/><circle cx="152" cy="147" r="3.5" fill="#fff"/>
+ <path d="M116 184Q126 191 141 183" stroke="#a14f68" stroke-width="4" fill="none" stroke-linecap="round"/>
+ <path d="M49 263Q27 286 5 333M196 266Q225 290 239 333" stroke="#263d75" stroke-width="25" stroke-linecap="round" fill="none"/>
+</g>
+</svg>
