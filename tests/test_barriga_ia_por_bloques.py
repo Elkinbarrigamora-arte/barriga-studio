@@ -722,6 +722,104 @@ class PruebasContinuidadUndecima(unittest.TestCase):
 
 
 
+
+class PruebasRechazoEditorialPersistente(unittest.TestCase):
+    def informe_anterior(self):
+        return {
+            "guion_original": original(),
+            "guion": dict(original(), gancho=GANCHO_CORTO,
+                          historia=HISTORIA_CORTA, cierre=CIERRE_CORTO),
+            "historial_bloques": [
+                {"bloque": bloque, "intento": 1, "texto": texto,
+                 "palabras": contar_palabras(texto),
+                 "longitud_valida": True, "aceptable_para_ensamblaje": True,
+                 "motivos_rechazo": []}
+                for bloque, texto in (
+                    ("gancho", GANCHO_CORTO),
+                    ("historia", HISTORIA_CORTA),
+                    ("cierre", CIERRE_CORTO))
+            ],
+        }
+
+    def test_rechazo_humano_no_reutiliza_historia_y_cierre(self):
+        anterior = self.informe_anterior()
+        nueva_historia = (
+            "Daniel descubrió un mensaje oculto detrás de la fotografía. "
+            "La dirección llevaba al faro abandonado donde vivía Mateo. "
+            "Con una linterna, siguió las marcas que rodeaban el edificio. "
+            "Encontró una puerta metálica y oyó la voz de Mateo al otro lado. "
+            "La carta estaba fechada ayer porque alguien había dejado una "
+            "pista reciente para que lo encontrara. "
+            "Daniel comprendió que su hermano nunca quiso desaparecer."
+        )
+        # Mantener prueba independiente de criterios cambiantes de longitud:
+        # el motor sigue conservando la decisión humana aunque la generación falle.
+        calls = []
+        def modelo(prompt, modelo):
+            calls.append(prompt)
+            return nueva_historia
+        result = ensamblar_por_bloques(
+            original(), sesion_previa=anterior, generador=modelo,
+            rechazar_historia_previa=True,
+            indicaciones_editoriales="No repetir historia rechazada; resolver carta.")
+        self.assertEqual(result["guion_original"], anterior["guion_original"])
+        self.assertEqual(result["historial_bloques"][:3], anterior["historial_bloques"])
+        self.assertEqual(result["bloques_aprobados_en_longitud"]["gancho"], 6)
+        self.assertGreaterEqual(len(calls), 1)
+        self.assertTrue(any("REVISION HUMANA OBLIGATORIA" in x for x in calls))
+        self.assertEqual(
+            {x["bloque"] for x in result["rechazos_editoriales"]},
+            {"historia", "cierre"})
+        self.assertFalse(result["publicacion_automatica_autorizada"])
+
+    def test_repetir_literalmente_bloque_rechazado_se_bloquea(self):
+        anterior = self.informe_anterior()
+        res = ensamblar_por_bloques(
+            original(), sesion_previa=anterior,
+            rechazar_historia_previa=True,
+            generador=lambda prompt, modelo: HISTORIA_CORTA)
+        self.assertEqual(res["estado"], "BLOQUE_RECHAZADO_HISTORIA")
+        self.assertEqual(len(res["historial_bloques"]), 5)
+        self.assertTrue(any(
+            "rechazado" in m for m in
+            res["historial_bloques"][-1]["motivos_rechazo"]))
+        self.assertEqual(res["bloques_aprobados_en_longitud"], {"gancho": 6})
+
+    def test_rechazo_persiste_tras_archivo_guardado(self):
+        previo = self.informe_anterior()
+        prev = ensamblar_por_bloques(
+            original(), sesion_previa=previo,
+            rechazar_historia_previa=True,
+            generador=lambda prompt, modelo: HISTORIA_CORTA)
+        calls = []
+        def modelo(prompt, modelo):
+            calls.append(prompt)
+            return HISTORIA_CORTA
+        nuevo = ensamblar_por_bloques(
+            original(), sesion_previa=prev, generador=modelo)
+        self.assertEqual(nuevo["estado"], "BLOQUE_RECHAZADO_HISTORIA")
+        self.assertEqual(nuevo["bloques_aprobados_en_longitud"], {"gancho": 6})
+        self.assertEqual(nuevo["rechazos_editoriales"], prev["rechazos_editoriales"])
+        self.assertEqual(len(calls), 2)
+
+    def test_no_aceptar_ingles_en_cierre(self):
+        texto = (
+            "Daniel reveló que Pepe fue burlado por un falso testimonio, "
+            "resolviendo su innocence."
+        )
+        motivos = detectar_problemas_editoriales(
+            texto, original(), "cierre")
+        self.assertTrue(any("innocence" in x for x in motivos))
+
+    def test_rechazar_historia_exige_guion_previo_real(self):
+        with self.assertRaisesRegex(ErrorNarrativa, "guion completo"):
+            ensamblar_por_bloques(
+                original(), sesion_previa={"historial_bloques": []},
+                rechazar_historia_previa=True,
+                generador=lambda prompt, modelo: "No debe ejecutarse.")
+
+
+
 class PruebasRecuperacionSexta(unittest.TestCase):
     def crear_informe_sexta(self):
         borrador = original()
