@@ -171,6 +171,55 @@ class MotorUnificadoTest(unittest.TestCase):
         self.assertTrue(any("20 anos" in x for x in problemas), problemas)
         self.assertTrue(any("su hermano" in x for x in problemas), problemas)
 
+    def test_regresion_hermano_secuestro_hace_anos_no_son_veinte(self):
+        idea = ("Un hombre recibe una carta escrita ayer por su hermano "
+                "desaparecido hace veinte años. Al seguir las pistas, "
+                "descubre una verdad inesperada.")
+        guion = {
+            "gancho": "¡La carta de su hermano fue escrita ayer!",
+            "historia": (
+                "La carta, escrita ayer, lo lleva a investigar. Juan "
+                "descubre que su hermano, Mateo, trabajaba para una "
+                "organización secreta. Mateo fue secuestrado hace años "
+                "por agentes de otra organización. Juan encuentra a Mateo "
+                "gravemente herido y descubre que querían matarlo."),
+            "cierre": (
+                "Mateo revela que una organización planeaba matarlo. "
+                "Juan promete protegerlo."),
+        }
+        motivos = auditar_fidelidad(idea, guion)
+        self.assertTrue(any("20 anos" in m for m in motivos), motivos)
+        self.assertTrue(any("su hermano" in m for m in motivos), motivos)
+
+    def test_reintento_exige_duracion_exacta_y_cierre_concreto(self):
+        idea = ("Un hombre recibe una carta escrita ayer por su hermano "
+                "desaparecido hace veinte años. Al seguir las pistas, "
+                "descubre una verdad inesperada.")
+        mala = {
+            "titulo": "Carta de Juan", "nicho": "ficcion",
+            "naturaleza": "ficcion",
+            "gancho": "¡La carta de su hermano fue escrita ayer!",
+            "historia": (
+                "Juan recibió una carta escrita ayer y siguió sus pistas. "
+                "Su hermano Mateo había desaparecido hace años."),
+            "cierre": "Mateo revela un secreto que solo él conoce.",
+            "personajes": [], "continuidad": {}, "fuentes": [],
+            "duracion_objetivo_segundos": 35,
+        }
+        with patch("barriga_ia_servicio_local.generar_local",
+                   return_value=mala) as generador:
+            with patch("barriga_ia_servicio_local.ensamblar_por_bloques") as armar:
+                salida = ejecutar_motor(idea, modelo="modelo-local")
+        self.assertEqual(salida["estado"], "PREMISA_DESVIADA")
+        self.assertFalse(salida["apto_para_revision_humana"])
+        self.assertEqual(generador.call_count, 2)
+        self.assertIn("DURACIÓN EXACTA", generador.call_args_list[0].args[0])
+        intento2 = generador.call_args_list[1].args[0]
+        self.assertIn("secuestrado hace años", intento2)
+        self.assertIn("cifras o cantidades temporales", intento2)
+        self.assertIn("hecho concreto", intento2)
+        armar.assert_not_called()
+
     def test_regresion_intercambio_hermano_por_esposa(self):
         """La nueva carta se conserva, pero no se puede cambiar al desaparecido."""
         idea = ("Un hombre recibe una carta escrita ayer por su hermano "
