@@ -667,7 +667,7 @@ class PruebasRecuperacionCierre(unittest.TestCase):
         cierres = [x for x in respuesta["historial_bloques"]
                    if x["bloque"] == "cierre"]
         self.assertEqual(cierres[0]["origen_edicion"],
-                         "EXTRACCION_CIERRE_ORACIONES_COMPLETAS")
+                         "DEPURACION_ADVERBIOS_REDUNDANTES")
         self.assertEqual(contar_palabras(respuesta["guion"]["cierre"]), 18)
         self.assertNotEqual(cierres[0]["texto_bruto"], cierres[0]["texto"])
 
