@@ -565,8 +565,8 @@ class PuenteHTTPTest(unittest.TestCase):
         self.assertIn("NUEVA GENERACIÓN", carga)
         self.assertIn("data.id", carga)
         self.assertIn("data.estado", carga)
-        generar = PANEL.split("   btn.onclick=async()=>{", 1)[1].split(
-            "   reparar.onclick=async()=>{", 1)[0]
+        generar = PANEL.split("   async function generarDesdePremisa(idea){", 1)[1].split(
+            "   btn.onclick=async()=>{", 1)[0]
         self.assertIn("cargarGuion(data,'nueva')", generar)
         self.assertIn("GENERACIÓN EN CURSO", generar)
         self.assertIn("SIN GENERACIÓN NUEVA", generar)
@@ -574,6 +574,26 @@ class PuenteHTTPTest(unittest.TestCase):
         recuperar = PANEL.split("   recuperar.onclick=async()=>{", 1)[1]
         self.assertIn("cargarGuion(data,'historial')", recuperar)
         self.assertIn("estadoVista,vista", PANEL)
+
+    def test_regenerar_desde_registro_guardado_sin_reescribir_editor(self):
+        from puente_local import PANEL
+        self.assertIn("Crear versión nueva desde la premisa guardada", PANEL)
+        boton = PANEL.split("   rehacer.onclick=async()=>{", 1)[1].split(
+            "   reparar.onclick=async()=>{", 1)[0]
+        self.assertIn("ultimoResultado.idea.trim()", boton)
+        self.assertIn("await generarDesdePremisa(idea)", boton)
+        self.assertNotIn("field.value=", boton)
+        self.assertIn("Se conservarán el registro antiguo", boton)
+        generar = PANEL.split("   async function generarDesdePremisa(idea){", 1)[1].split(
+            "   btn.onclick=async()=>{", 1)[0]
+        self.assertIn("idea.length>500", generar)
+        self.assertIn("body:JSON.stringify({idea})", generar)
+        self.assertIn("cargarGuion(data,'nueva')", generar)
+        self.assertNotIn("field.value=", generar)
+        normal = PANEL.split("   btn.onclick=async()=>{", 1)[1].split(
+            "   rehacer.onclick=async()=>{", 1)[0]
+        self.assertIn("El campo contiene un guion completo", normal)
+        self.assertIn("await generarDesdePremisa(idea)", normal)
 
     def test_historial_privado_por_token(self):
         status, _ = self.pedir("/api/historial")
