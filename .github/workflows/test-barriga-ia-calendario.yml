@@ -6,6 +6,7 @@ on:
       - 'assets/studio-interfaz.css'
       - 'assets/banner-personajes.svg'
       - 'tests/smoke_studio_chromium.py'
+      - 'tests/studio_browser_interactions.py'
       - 'assets/studio-interfaz.js'
       - 'assets/studio-mejoras.js'
       - 'tests/test_studio_interfaz.py'
@@ -43,6 +44,11 @@ jobs:
       - name: Validar todo el proyecto sin publicar
         run: |
           python -m unittest discover -s tests -v
+      - name: Verificar controles con Chromium y proyectos de prueba aislados
+        if: matrix.python-version == '3.11'
+        run: |
+          python -m pip install playwright==1.57.0
+          python tests/studio_browser_interactions.py
       - name: Capturar interfaz real en escritorio y móvil
         if: matrix.python-version == '3.11'
         run: python tests/smoke_studio_chromium.py --output evidencia-ui
