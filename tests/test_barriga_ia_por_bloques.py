@@ -619,6 +619,58 @@ class PruebasRecuperacionCierre(unittest.TestCase):
             texto, original(), "cierre")
         self.assertIn("Posible personaje o nombre nuevo: Pepe", motivos)
 
+    def test_rescate_20_palabras_solo_quita_redundancias(self):
+        cierre = (
+            "Daniel realmente encontró a Mateo en el faro y "
+            "simplemente entendió que la carta había sido escrita "
+            "ayer por él."
+        )
+        self.assertEqual(contar_palabras(cierre), 20)
+        compacto = condensar_cierre_sin_cortar(
+            cierre, original(),
+            {"gancho": GANCHO_CORTO, "historia": HISTORIA_CORTA},
+            limites_de_bloques(35))
+        self.assertEqual(contar_palabras(compacto), 18)
+        self.assertNotIn("realmente", compacto)
+        self.assertNotIn("simplemente", compacto)
+        self.assertIn("carta había sido escrita ayer", compacto)
+        self.assertTrue(compacto.endswith("por él."))
+
+    def test_rescate_no_corta_20_palabras_con_datos_necesarios(self):
+        cierre = (
+            "Daniel profundamente encontró a Mateo en el faro y "
+            "entonces entendió que la carta había sido escrita "
+            "ayer por él."
+        )
+        self.assertEqual(contar_palabras(cierre), 20)
+        self.assertIsNone(condensar_cierre_sin_cortar(
+            cierre, original(),
+            {"gancho": GANCHO_CORTO, "historia": HISTORIA_CORTA},
+            limites_de_bloques(35)))
+
+    def test_rescate_20_palabras_evito_segunda_llamada(self):
+        cierre = (
+            "Daniel realmente encontró a Mateo en el faro y "
+            "simplemente entendió que la carta había sido escrita "
+            "ayer por él."
+        )
+        draft = original()
+        draft.update(gancho=GANCHO_CORTO, historia=HISTORIA_CORTA)
+        llamadas = []
+        def generador(prompt, modelo):
+            llamadas.append(prompt)
+            return cierre
+        respuesta = ensamblar_por_bloques(
+            draft, generador=generador, reutilizar_borrador=True)
+        self.assertEqual(len(llamadas), 1)
+        self.assertEqual(respuesta["estado"], "REVISION_HUMANA_PENDIENTE")
+        cierres = [x for x in respuesta["historial_bloques"]
+                   if x["bloque"] == "cierre"]
+        self.assertEqual(cierres[0]["origen_edicion"],
+                         "EXTRACCION_CIERRE_ORACIONES_COMPLETAS")
+        self.assertEqual(contar_palabras(respuesta["guion"]["cierre"]), 18)
+        self.assertNotEqual(cierres[0]["texto_bruto"], cierres[0]["texto"])
+
     def test_rescate_cierre_largo_conserva_ultimo_hecho_completo(self):
         largo = (
             "Daniel regresó al muelle y descubrió una carta sin remitente. "
