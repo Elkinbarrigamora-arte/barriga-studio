@@ -8,6 +8,7 @@ Compatible con Python 3.9 o posterior.
 """
 import argparse
 from datetime import datetime
+from difflib import SequenceMatcher
 import json
 import re
 from pathlib import Path
@@ -133,6 +134,9 @@ def detectar_problemas_editoriales(texto, original, bloque, anterior=None):
         problemas.append("Oración incompleta: no hay puntuación final")
     if re.search(r"\b(\w+)(?:\s+\1){3,}\b", texto, re.IGNORECASE | re.UNICODE):
         problemas.append("Repetición mecánica de palabras consecutivas")
+    if bloque == "cierre" and re.search(
+            r"\binnocence\b", texto, re.IGNORECASE):
+        problemas.append("Palabra inglesa no traducida: innocence")
     # Mantener únicos los avisos.
     return list(dict.fromkeys(problemas))
 
@@ -476,8 +480,11 @@ def leer_sesion_por_bloques(ruta):
 
 
 def recuperar_bloques_aprobados(sesion, original, limites):
-    """Preservar únicamente bloques marcados aprobados que sigan siendo válidos."""
+    """Recuperar aprobados salvo rechazos editoriales explícitos y persistidos."""
     aprobados = {}
+    rechazados = sesion.get("rechazos_editoriales", [])
+    if not isinstance(rechazados, list):
+        rechazados = []
     for registro in sesion.get("historial_bloques", []):
         if not isinstance(registro, dict):
             continue
@@ -491,6 +498,10 @@ def recuperar_bloques_aprobados(sesion, original, limites):
             and registro.get("longitud_valida") is True
             and not registro.get("motivos_rechazo") and not registro.get("error"))
         if not marcado or registro.get("motivos_rechazo") or registro.get("error"):
+            continue
+        if any(isinstance(r, dict) and r.get("bloque") == nombre
+               and semejanza_narrativa(texto, r.get("texto", "")) >= 0.90
+               for r in rechazados):
             continue
         menor, mayor = limites[nombre]
         if not menor <= contar_palabras(texto) <= mayor:
@@ -509,6 +520,16 @@ def recuperar_bloques_aprobados(sesion, original, limites):
 
 def normalizar_comparacion(texto):
     return re.sub(r"\s+", " ", texto.casefold()).strip(" .!¡?¿…")
+
+
+def semejanza_narrativa(a, b):
+    """Coeficiente de parecido para evitar reutilizar un rechazo humano."""
+    if not isinstance(a, str) or not isinstance(b, str):
+        return 0.0
+    a, b = normalizar_comparacion(a), normalizar_comparacion(b)
+    if not a or not b:
+        return 0.0
+    return SequenceMatcher(None, a, b, autojunk=False).ratio()
 
 
 
@@ -615,7 +636,9 @@ def ensamblar_por_bloques(original, duracion=35, modelo=MODELO,
                           max_intentos=2, generador=None,
                           gancho_aprobado=None, estrategia_gancho="modelo",
                           premisa=None, sesion_previa=None,
-                          palabras_por_minuto=150):
+                          palabras_por_minuto=150,
+                          rechazar_historia_previa=False,
+                          indicaciones_editoriales=None):
     """Máximo seis llamadas y ningún recorte ciego de frases/palabras.
 
     Preserva todos los intentos y produce guion completo SOLO si se
@@ -632,6 +655,16 @@ def ensamblar_por_bloques(original, duracion=35, modelo=MODELO,
     evaluacion_original = evaluar_guion(original, duracion, palabras_por_minuto)
     if sesion_previa is not None and not isinstance(sesion_previa, dict):
         raise ErrorNarrativa("Sesión previa inválida")
+    if type(rechazar_historia_previa) is not bool:
+        raise ErrorNarrativa("Marca de rechazo editorial inválida")
+    if indicaciones_editoriales is not None and (
+            not isinstance(indicaciones_editoriales, str)
+            or not 10 <= len(indicaciones_editoriales.strip()) <= 700):
+        raise ErrorNarrativa("Indicaciones editoriales: 10 a 700 caracteres")
+    if rechazar_historia_previa and (
+            not sesion_previa or not isinstance(sesion_previa.get("guion"), dict)):
+        raise ErrorNarrativa("Para rechazar una historia se requiere un informe "
+                             "previo con guion completo")
     if original["naturaleza"] == "factual" or original["nicho"] == "noticias":
         raise ErrorNarrativa(
             "Prohibido reescribir automáticamente información factual o noticias")
@@ -645,8 +678,23 @@ def ensamblar_por_bloques(original, duracion=35, modelo=MODELO,
             raise ErrorNarrativa(
                 "El gancho indicado debe contener entre {} y {} palabras".format(
                     menor, mayor))
+    rechazos = list(sesion_previa.get("rechazos_editoriales", [])) if sesion_previa else []
+    if rechazar_historia_previa:
+        previo_completo = sesion_previa["guion"]
+        for nombre in ("historia", "cierre"):
+            anterior = previo_completo.get(nombre)
+            if isinstance(anterior, str) and anterior.strip() and not any(
+                    isinstance(r, dict) and r.get("bloque") == nombre
+                    and semejanza_narrativa(anterior, r.get("texto", "")) >= 0.99
+                    for r in rechazos):
+                rechazos.append({
+                    "bloque": nombre, "texto": anterior,
+                    "motivo": "RECHAZADO_POR_REVISION_HUMANA",
+                })
     resultado = {
         "guion_original": original,
+        "rechazos_editoriales": rechazos,
+        "indicaciones_editoriales": indicaciones_editoriales,
         "evaluacion_original": evaluacion_original,
         "limites_bloques": {k: list(v) for k, v in limites.items()},
         "historial_bloques": list(sesion_previa.get("historial_bloques", [])) if sesion_previa else [],
@@ -660,7 +708,14 @@ def ensamblar_por_bloques(original, duracion=35, modelo=MODELO,
         "nota": "Control de longitud y reglas editoriales parciales; "
                 "NO equivale a validación semántica humana ni prueba de viralidad",
     }
-    aprobados = recuperar_bloques_aprobados(sesion_previa, original, limites) if sesion_previa else {}
+    sesion_para_recuperar = dict(sesion_previa) if sesion_previa else None
+    if sesion_para_recuperar is not None:
+        sesion_para_recuperar["rechazos_editoriales"] = rechazos
+    aprobados = recuperar_bloques_aprobados(
+        sesion_para_recuperar, original, limites) if sesion_para_recuperar else {}
+    if rechazar_historia_previa:
+        aprobados.pop("historia", None)
+        aprobados.pop("cierre", None)
     resultado["bloques_aprobados_en_longitud"] = {k: contar_palabras(v) for k, v in aprobados.items()}
     if gancho_aprobado is None and "gancho" not in aprobados and estrategia_gancho == "reglas-primero":
         alternativa = proponer_gancho_seguro(
@@ -704,9 +759,19 @@ def ensamblar_por_bloques(original, duracion=35, modelo=MODELO,
                    if isinstance(x, dict) and x.get("bloque") == bloque
                    and not x.get("aceptable_para_ensamblaje")]
         previo = previos[-1] if previos else None
+        if not previo and any(
+                isinstance(r, dict) and r.get("bloque") == bloque
+                for r in rechazos):
+            previo = {"texto": "", "palabras": 0, "motivos_rechazo": [
+                "Historia rechazada por revisión humana: crear una nueva"] }
         exitoso = False
         for numero in range(1, max_intentos + 1):
             prompt = prompt_para_bloque(bloque, original, aprobados, limites, previo)
+            if indicaciones_editoriales and bloque != "gancho":
+                prompt += ("\nREVISION HUMANA OBLIGATORIA: "
+                           + indicaciones_editoriales.strip()
+                           + "\nNo copies pasajes rechazados; conserva el "
+                           "gancho y resuelve su conflicto central.")
             try:
                 if generador is generar_texto_local:
                     limite_tokens = {"gancho": 75, "historia": 420,
@@ -745,6 +810,11 @@ def ensamblar_por_bloques(original, duracion=35, modelo=MODELO,
                     texto, original, bloque, previo)
                 motivos += verificar_continuidad_entre_bloques(
                     bloque, texto, aprobados)
+                if any(isinstance(r, dict) and r.get("bloque") == bloque
+                       and semejanza_narrativa(texto, r.get("texto", "")) >= 0.90
+                       for r in rechazos):
+                    motivos.append("Demasiado similar a un bloque rechazado "
+                                   "por revisión humana")
                 if normalizar_comparacion(texto) and any(
                     normalizar_comparacion(texto) == normalizar_comparacion(t)
                     for t in rechazos_anteriores if isinstance(t, str)
@@ -802,6 +872,10 @@ def main():
     parser.add_argument("--duracion", type=int, default=35)
     parser.add_argument("--max-intentos", type=int, default=2)
     parser.add_argument("--modelo", default=MODELO)
+    parser.add_argument("--rechazar-historia-previa", action="store_true",
+                        help="Rechazar historia y cierre anteriores por decisión humana; conserva gancho")
+    parser.add_argument("--indicaciones-editoriales", default=None,
+                        help="Correcciones del revisor (10 a 700 caracteres)")
     parser.add_argument("--palabras-por-minuto", type=int, default=150,
                         help="Velocidad de voz: 120 a 210 palabras/minuto")
     parser.add_argument("--gancho-aprobado", default=None,
@@ -825,7 +899,9 @@ def main():
             max_intentos=args.max_intentos, modelo=args.modelo,
             gancho_aprobado=args.gancho_aprobado,
             estrategia_gancho=args.estrategia_gancho, premisa=args.premisa,
-            sesion_previa=sesion_previa, palabras_por_minuto=args.palabras_por_minuto)
+            sesion_previa=sesion_previa, palabras_por_minuto=args.palabras_por_minuto,
+            rechazar_historia_previa=args.rechazar_historia_previa,
+            indicaciones_editoriales=args.indicaciones_editoriales)
         resultado["fecha_revision"] = datetime.utcnow().isoformat() + "Z"
         args.salida.parent.mkdir(parents=True, exist_ok=True)
         with args.salida.open("x", encoding="utf-8") as f:
