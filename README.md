@@ -40,6 +40,46 @@ Se abre una página **solo local** en `http://127.0.0.1:8766`. Escribe una idea 
 
 **Pendiente:** comprobar la llamada real en la Mac y la persistencia del guion; esto no genera videos ni voces.
 
+### Puente experimental de imágenes con Draw Things
+
+El mismo puente local (`tools/puente_local.py`) puede conectar el generador
+de imágenes de Draw Things a un panel **Barriga IA · Imágenes**. Requiere
+Draw Things abierto, con API HTTP habilitada en `127.0.0.1:7860`, y el
+modelo deseado cargado en esa aplicación. Desde una Terminal en la Mac:
+
+```bash
+cd "$HOME/barriga-studio"
+python3 tools/puente_local.py --studio "$PWD"
+```
+
+Abre `http://127.0.0.1:8766` si no se abre automáticamente. En el creador,
+pulsa **Comprobar conexión**, elige el perfil *Planeta*, *Esmeralda* o
+*Universo*, modifica la descripción y pulsa **Generar imagen**. La vista
+previa aparece en la misma página. **Descargar imagen** guarda el resultado
+por decisión explícita del usuario. Los pasos, la guía y la semilla se pueden
+ajustar para comparar variantes; los valores están limitados para evitar
+solicitudes accidentales demasiado grandes. Una generación puede tardar
+varios minutos.
+
+La respuesta viaja directamente entre Draw Things, el servidor local y el
+navegador: **no se sube a GitHub ni a un servicio externo**. No se guardan
+automáticamente prompts, imágenes ni proyectos, ni se reentrenan pesos.
+La integración es experimental y la calidad requiere validación visual con
+una generación real en la Mac; no crea video ni voz.
+
+**Importante sobre proyectos existentes:** `127.0.0.1:8766` es un origen
+distinto al dominio publicado de Studio. Por la separación de almacenamiento
+del navegador, los proyectos existentes en el sitio publicado **no aparecen
+automáticamente** en el puente local. Antes de mover proyectos, descarga su
+respaldo JSON desde el origen donde estén guardados; la restauración aditiva
+es manual. No borres datos del navegador.
+
+Comprobación de código sin Draw Things:
+
+```bash
+python3 -m unittest discover -s tests -p 'test_*.py'
+```
+
 ## Comprobaciones confirmadas en el Mac (prueba aportada por el propietario, 22 oct 2026)
 
 - Ollama local: disponible.
