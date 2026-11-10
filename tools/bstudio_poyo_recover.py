@@ -98,10 +98,19 @@ def read_existing_task(task_id, runner=subprocess.run):
     ]
     result = runner(command, text=True, capture_output=True, timeout=120, check=False)
     if result.returncode != 0:
-        # Avoid echoing stderr: CLI errors can contain account details.
+        # PoYo CLI's exitCodeFor(): 3 is HTTP 401 or 403, not a JSON format error.
+        # Do not echo stderr because it can contain private account information.
+        if result.returncode == 3:
+            raise RuntimeError(
+                "PoYo rechazó la autenticación o el acceso a esta tarea "
+                "(HTTP 401/403). Comprueba con la misma CLI: "
+                "'npx -y " + CLI_PACKAGE + " auth status' y "
+                "'npx -y " + CLI_PACKAGE + " account'. "
+                "No vuelvas a enviar la generación."
+            )
         raise RuntimeError(
-            "PoYo CLI no pudo consultar la tarea. Comprueba 'poyo account' y el "
-            "formato JSON. Código de salida: " + str(result.returncode)
+            "No se pudo consultar la tarea existente (salida CLI " +
+            str(result.returncode) + "). No se generó ningún video nuevo."
         )
     return parse_task(result.stdout)
 
