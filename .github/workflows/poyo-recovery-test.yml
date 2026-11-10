@@ -41,11 +41,17 @@ jobs:
           sudo apt-get install -y ffmpeg
       - name: Real FFmpeg audiovisual smoke test (synthetic media)
         run: python tests/ffmpeg_smoke.py
-      - name: Install Playwright test runner
+  browser-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    container:
+      image: mcr.microsoft.com/playwright:v1.56.1-noble
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      - name: Install test dependencies
         run: npm install --no-audit --no-fund
-      - name: Install Chromium for functional UI checks
-        run: npx playwright install --with-deps chromium
-      - name: Run real UI tests for controls and project safety
+      - name: Run real Chromium UI tests
         run: npm run test:ui
       - name: Upload failing browser traces
         if: failure()
@@ -56,3 +62,4 @@ jobs:
             test-results/
             playwright-report/
           if-no-files-found: ignore
+
