@@ -7,6 +7,7 @@ on:
     paths:
       - "tools/bstudio_poyo_recover.py"
       - "tests/test_bstudio_poyo_recover.py"
+      - "tools/poyo_panel_local.py"
       - "tools/bstudio_reel_assemble.py"
       - "tests/test_bstudio_reel_assemble.py"
       - ".github/workflows/poyo-recovery-test.yml"
@@ -27,6 +28,6 @@ jobs:
         with:
           python-version: "3.11"
       - name: Syntax validation
-        run: python -m py_compile tools/bstudio_poyo_recover.py tools/bstudio_reel_assemble.py tests/test_bstudio_poyo_recover.py tests/test_bstudio_reel_assemble.py
+        run: python -m py_compile tools/bstudio_poyo_recover.py tools/poyo_panel_local.py tools/bstudio_reel_assemble.py tests/test_bstudio_poyo_recover.py tests/test_bstudio_reel_assemble.py
       - name: Offline test suite (no API key, no paid calls)
         run: python -m unittest discover -s tests -p 'test_bstudio_*.py' -v
