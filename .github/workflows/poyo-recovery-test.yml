@@ -1,0 +1,30 @@
+name: B STUDIO PoYo Recovery QA
+on:
+  push:
+    branches:
+      - feat/bstudio-elite-recovery-qa-20261110
+  pull_request:
+    paths:
+      - "tools/bstudio_poyo_recover.py"
+      - "tests/test_bstudio_poyo_recover.py"
+      - ".github/workflows/poyo-recovery-test.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  recovery-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      - name: Install Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Syntax validation
+        run: python -m py_compile tools/bstudio_poyo_recover.py tests/test_bstudio_poyo_recover.py
+      - name: Offline test suite (no API key, no paid calls)
+        run: python -m unittest discover -s tests -p 'test_bstudio_poyo_recover.py' -v
