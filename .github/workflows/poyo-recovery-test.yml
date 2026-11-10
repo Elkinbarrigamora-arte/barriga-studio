@@ -11,6 +11,9 @@ on:
       - "tools/bstudio_reel_assemble.py"
       - "tests/test_bstudio_reel_assemble.py"
       - "tests/ffmpeg_smoke.py"
+      - "browser-tests/**"
+      - "playwright.config.cjs"
+      - "package.json"
       - ".github/workflows/poyo-recovery-test.yml"
   workflow_dispatch:
 
@@ -38,3 +41,18 @@ jobs:
           sudo apt-get install -y ffmpeg
       - name: Real FFmpeg audiovisual smoke test (synthetic media)
         run: python tests/ffmpeg_smoke.py
+      - name: Install Playwright test runner
+        run: npm install --no-audit --no-fund
+      - name: Install Chromium for functional UI checks
+        run: npx playwright install --with-deps chromium
+      - name: Run real UI tests for controls and project safety
+        run: npm run test:ui
+      - name: Upload failing browser traces
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: browser-regression-evidence
+          path: |
+            test-results/
+            playwright-report/
+          if-no-files-found: ignore
