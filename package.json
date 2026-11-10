@@ -1,0 +1,13 @@
+{
+  "name": "barriga-studio-quality-gates",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Pruebas de regresión de la interfaz sin generar ni cobrar videos",
+  "scripts": {
+    "test:ui": "playwright test",
+    "test:ui:list": "playwright test --list"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.56.1"
+  }
+}
