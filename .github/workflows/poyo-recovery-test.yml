@@ -32,5 +32,9 @@ jobs:
         run: python -m py_compile tools/bstudio_poyo_recover.py tools/poyo_panel_local.py tools/bstudio_reel_assemble.py tests/test_bstudio_poyo_recover.py tests/test_bstudio_reel_assemble.py
       - name: Offline test suite (no API key, no paid calls)
         run: python -m unittest discover -s tests -p 'test_bstudio_*.py' -v
+      - name: Install FFmpeg and FFprobe for audiovisual smoke test
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y ffmpeg
       - name: Real FFmpeg audiovisual smoke test (synthetic media)
         run: python tests/ffmpeg_smoke.py
