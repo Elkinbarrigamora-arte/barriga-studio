@@ -6,7 +6,11 @@ import re
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import urlsplit
-from poyo_wan_fast import request_json, BASE, PRICE_USD, LIMIT_USD, read_ledger
+from poyo_wan_fast import PRICE_USD, LIMIT_USD, read_ledger
+from bstudio_poyo_recover import (
+    read_existing_task, find_video_url, validate_download_url, save_video,
+    probe_video, TASK_RE,
+)
 
 HOST = "127.0.0.1"
 PORT = 8771
@@ -27,8 +31,8 @@ pre{white-space:pre-wrap;overflow-wrap:anywhere}small{color:#bfbfd0}#out{min-hei
 <button id="preview">Preparar sin gastar</button></section>
 <section><h2>2. Consultar video existente</h2>
 <label for="task">ID de tarea</label><input id="task" maxlength="160" placeholder="task_id">
-<p><button id="check">Consultar estado</button></p>
-<small>Requiere POYO_API_KEY en la Mac; consultar no crea una generación.</small></section>
+<p><button id="check">Consultar estado</button> <button id="recover">Recuperar MP4 existente</button></p>
+<small>Usa la cuenta ya autenticada en el llavero de macOS. Recuperar una tarea completada no genera otra escena ni consume nuevos créditos.</small></section>
 <section><h2>Resultado</h2><pre id="out" role="status" aria-live="polite">Sin solicitudes todavía.</pre></section>
 <p><small>Esta pantalla no tiene botón de generación pagada. Los proyectos del Studio principal permanecen intactos.</small></p>
 </main><script>
@@ -49,6 +53,12 @@ document.querySelector('#check').onclick=()=>{
  const id=document.querySelector('#task').value.trim();
  if(!/^[a-zA-Z0-9_-]{1,160}$/.test(id)){out.textContent='ID de tarea inválido.';return}
  call('/api/status/'+encodeURIComponent(id));
+};
+document.querySelector('#recover').onclick=()=>{
+ const id=document.querySelector('#task').value.trim();
+ if(!/^[a-zA-Z0-9_-]{8,100}$/.test(id)){out.textContent='ID de tarea inválido.';return}
+ call('/api/recover',{method:'POST',headers:{'Content-Type':'application/json'},
+ body:JSON.stringify({task_id:id})});
 };
 </script></body></html>"""
 
@@ -73,18 +83,21 @@ class Handler(BaseHTTPRequestHandler):
             return self.send(200, HTML, html=True)
         match = re.fullmatch(r"/api/status/([A-Za-z0-9_-]{1,160})", route)
         if match:
-            key = os.environ.get("POYO_API_KEY")
-            if not key:
-                return self.send(400, {"error": "Configura POYO_API_KEY en tu Mac, no en el navegador."})
             try:
-                result = request_json(f"{BASE}/status/{match.group(1)}", key)
-                return self.send(200, result)
-            except RuntimeError as exc:
+                result = read_existing_task(match.group(1))
+                return self.send(200, {
+                    "task_id": result.get("task_id", match.group(1)),
+                    "status": result.get("status") or result.get("raw_status"),
+                    "completed_files_available": bool(result.get("files")),
+                    "note": "Consulta por CLI con autenticación existente; sin nuevos cargos.",
+                })
+            except (RuntimeError, ValueError, OSError) as exc:
                 return self.send(502, {"error": str(exc)})
         return self.send(404, {"error": "Ruta no encontrada"})
 
     def do_POST(self):
-        if urlsplit(self.path).path != "/api/preview":
+        route = urlsplit(self.path).path
+        if route not in ("/api/preview", "/api/recover"):
             return self.send(404, {"error": "Ruta no encontrada"})
         if not self.same_origin():
             return self.send(403, {"error": "Origen no autorizado"})
@@ -95,6 +108,28 @@ class Handler(BaseHTTPRequestHandler):
             if not 1 <= size <= 4000:
                 return self.send(413, {"error": "Solicitud muy grande"})
             payload = json.loads(self.rfile.read(size))
+            if route == "/api/recover":
+                task_id = payload.get("task_id", "") if isinstance(payload, dict) else ""
+                if not isinstance(task_id, str) or not TASK_RE.fullmatch(task_id):
+                    return self.send(400, {"error": "ID de tarea inválido"})
+                result = read_existing_task(task_id)
+                status = str(result.get("status") or result.get("raw_status") or "").lower()
+                if status not in ("succeeded", "finished", "completed", "success"):
+                    return self.send(409, {"error": "La tarea no está terminada; no se creará otra"})
+                url = find_video_url(result)
+                validate_download_url(url)
+                dest = Path.home() / "Movies" / "BarrigaStudio" / ("poyo-" + task_id + ".mp4")
+                if dest.exists():
+                    return self.send(200, {
+                        "estado": "archivo_ya_existente", "ruta": str(dest),
+                        "nota": "No se sobreescribió. Confirma la integridad del archivo existente.",
+                    })
+                size = save_video(url, dest)
+                return self.send(200, {
+                    "estado": "mp4_descargado", "ruta": str(dest),
+                    "bytes": size, "validacion": probe_video(dest),
+                    "credito_generacion_adicional": 0,
+                })
             prompt = payload.get("prompt", "")
             if not isinstance(prompt, str) or not 1 <= len(prompt.strip()) <= 800:
                 return self.send(400, {"error": "Descripción inválida"})
@@ -106,8 +141,8 @@ class Handler(BaseHTTPRequestHandler):
                 "local_reserved_usd": ledger["reserved_usd"],
                 "charged_usd": 0, "video_generated": False,
             })
-        except (ValueError, TypeError, KeyError, OSError):
-            return self.send(400, {"error": "Solicitud inválida o registro local ilegible"})
+        except (ValueError, TypeError, KeyError, OSError, RuntimeError) as exc:
+            return self.send(400, {"error": str(exc)})
 
 
 if __name__ == "__main__":
