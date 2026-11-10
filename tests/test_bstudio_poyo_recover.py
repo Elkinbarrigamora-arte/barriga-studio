@@ -88,6 +88,15 @@ class RecoveryTests(unittest.TestCase):
         self.assertIn("get", captured)
         self.assertNotIn("submit", captured)
 
+    def test_403_reports_auth_without_exposing_credentials(self):
+        def rejected(command, **kwargs):
+            return mock.Mock(returncode=3, stdout="", stderr="secret-personal-token")
+        with mock.patch.object(module.shutil, "which", return_value="/usr/bin/npx"):
+            with self.assertRaises(RuntimeError) as ctx:
+                module.read_existing_task("0AHQMX2G2T4ZZE6O", runner=rejected)
+        self.assertIn("401/403", str(ctx.exception))
+        self.assertNotIn("secret-personal-token", str(ctx.exception))
+
     def test_invalid_task_id(self):
         with self.assertRaises(ValueError):
             module.read_existing_task("../bad")
