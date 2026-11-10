@@ -50,3 +50,19 @@ El programa reserva un estimado de 0.03 USD en `~/.barriga-studio/poyo-budget.js
 5. Probar FFmpeg y almacenamiento persistente, aún no verificados.
 
 No considerar 35 segundos como siete clips garantizados: la duración por generación no está confirmada.
+
+## Panel local sin cargos
+
+En la Mac, después de descargar la rama de prueba:
+
+```bash
+cd "$HOME/barriga-studio"
+git fetch origin
+git switch feat/poyo-wan22-480p-budget-20261110
+git pull --ff-only
+python3 tools/poyo_panel_local.py
+```
+
+Abrirá `http://127.0.0.1:8771`. Escribe una descripción y pulsa **Preparar sin gastar**: muestra una simulación y el estimado de US$0,03 sin consultar PoYo ni hacer un cargo. La sección **Consultar estado** acepta un identificador de una tarea existente; esta consulta sí requiere la variable de entorno `POYO_API_KEY` configurada localmente. No se debe pegar la clave en el navegador.
+
+El panel está separado temporalmente de la portada para evitar romper la persistencia de los proyectos existentes. Todavía no está probado en la Mac ni produce previsualización de video. El comando cambia a una rama experimental: si hay cambios locales sin guardar, haz primero respaldo o commit antes del cambio de rama.
