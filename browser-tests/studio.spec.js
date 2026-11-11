@@ -313,8 +313,11 @@ test.describe('Respaldo exportación e importación sin pérdida', () => {
     expect(await saved(page)).toHaveLength(1);
   });
   test('restaura el archivo realmente descargado en un perfil vacío', async ({page,browser,baseURL}) => {
-    await add(page,{name:'Proyecto portable',script:'Narración conservada',voice:'Español femenino'});
+    const name = 'Proyecto portable ' + '🎬'.repeat(160);
+    const script = 'Narración conservada\n' + 'Escena de prueba. '.repeat(2000) + '\nÚltima escena.';
+    await add(page,{name,script,voice:'Español femenino'});
     const original = (await saved(page))[0];
+    expect(original).toMatchObject({name,script});
     const [download] = await Promise.all([
       page.waitForEvent('download'),
       page.getByRole('button',{name:'Descargar respaldo JSON'}).click()
@@ -331,6 +334,7 @@ test.describe('Respaldo exportación e importación sin pérdida', () => {
       await expect(restored.locator('#respaldo-status')).toContainText('1 añadidos');
       expect(await saved(restored)).toEqual([original]);
       await restored.getByRole('button',{name:'Abrir'}).click();
+      await expect(restored.locator('#script')).toHaveValue(script);
       await expect(restored.locator('#voice')).toHaveValue('Español femenino');
     } finally {
       await isolated.close();

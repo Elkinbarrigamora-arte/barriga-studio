@@ -29,6 +29,8 @@ El código de la Mac tiene cambios locales modificados y archivos sin seguimient
 
 El script `tools/bstudio_mac_preflight.py` hace un inventario local de solo lectura de Git, FFmpeg, Node, carpetas de motores y puertos. El script no lee claves ni modifica datos, pero no sustituye pruebas reales.
 
+La prueba de restauración del navegador usa un JSON descargado por la propia interfaz y verifica que el título y el guion se recuperen completos en un perfil vacío, incluso cuando son largos. Este respaldo cubre los campos de borrador del navegador, no sustituye una copia verificada de videos, voces, colas ni archivos locales de la Mac.
+
 ## Etiquetado y reversión
 - Identificador único de release: `BSTUDIO-ELITE-YYYYMMDD-N`.
 - Cambios a `main` mediante revisión y CI aprobada; fusionar solo tras reconciliar la Mac.
