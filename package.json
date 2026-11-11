@@ -6,7 +6,8 @@
   "scripts": {
     "test:ui": "playwright test",
     "test:ui:list": "playwright test --list",
-    "test:bridge": "playwright test --config=playwright.bridge.config.cjs"
+    "test:bridge": "playwright test --config=playwright.bridge.config.cjs",
+    "test:elite": "playwright test --config=playwright.elite.config.cjs"
   },
   "devDependencies": {
     "@playwright/test": "1.56.1"
