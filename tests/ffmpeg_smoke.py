@@ -65,8 +65,23 @@ def main():
         run(sys.executable, str(assembler), str(manifest), "--output", str(outfile))
         if not outfile.exists() or outfile.stat().st_size < 100:
             raise RuntimeError("Final MP4 missing or empty.")
+        silent = root / "silent.wav"
+        run("ffmpeg", "-hide_banner", "-loglevel", "error",
+            "-f", "lavfi", "-i", "anullsrc=r=44100:cl=mono", "-t", "35",
+            "-c:a", "pcm_s16le", str(silent))
+        manifest.write_text(json.dumps({
+            "target_seconds": 35, "scenes": scenes, "voice": str(silent)
+        }), encoding="utf-8")
+        rejected = root / "silent-reel.mp4"
+        result = subprocess.run(
+            [sys.executable, str(assembler), str(manifest), "--output", str(rejected)],
+            capture_output=True, text=True, timeout=120, check=False,
+        )
+        if result.returncode != 1 or "silencio" not in result.stderr or rejected.exists():
+            raise RuntimeError("A silent narration was not rejected before publishing.")
         check_recovery(outfile, root)
         print("FFmpeg smoke test passed: synthetic 35-second video and audio tracks.")
+        print("Audio signal smoke passed: a silent 35-second narration was rejected.")
         print("Recovery smoke passed: valid MP4 preserved, truncated MP4 rejected.")
 
 
