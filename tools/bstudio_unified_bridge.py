@@ -389,7 +389,8 @@ def make_handler(studio, media_dir, runtime_asset, token, port, model, voices_di
                     health = ollama_health(model)
                     if health["state"] != "ready":
                         return self.send_json(503, {
-                            "error": "Barriga IA no está listo: " + health.get("detail", "")})
+                            "error": "Barriga IA no está listo: " + (health.get("detail") or
+                                     "Ollama no responde o no tiene un modelo compatible.")})
                     selected_model = health.get("model") or model
                     result = generate_ollama_script(idea.strip(), selected_model)
                     return self.send_json(200, result)
