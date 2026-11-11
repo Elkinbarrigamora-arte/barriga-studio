@@ -1,9 +1,16 @@
 /* B STUDIO: one local workspace for scripts and actual media. */
 (()=>{
 "use strict";
-const config=window.__BSTUDIO_BRIDGE__;
+const runtimeScript=document.currentScript;
+const embedded=runtimeScript?.dataset?.token ? {
+  token:runtimeScript.dataset.token,
+  apiBase:runtimeScript.dataset.apiBase||"",
+  taskId:runtimeScript.dataset.taskId||""
+}:null;
+const config=embedded||window.__BSTUDIO_BRIDGE__;
 if(!config || typeof config.token!=="string") return;
 const token=config.token;
+const apiBase=config.apiBase||"";
 const knownId=config.taskId||"";
 function mount(){
  if(document.getElementById("bstudio-integrado"))return;
@@ -78,7 +85,7 @@ function mount(){
  target.appendChild(host);
  const el=id=>root.getElementById(id);
  const api=async(path,options={})=>{
-   const resp=await fetch(path,{...options,
+   const resp=await fetch(apiBase+path,{...options,
      headers:{"X-Barriga-Token":token,...(options.headers||{})}});
    const payload=await resp.json();
    if(!resp.ok)throw Error(payload.error||"HTTP "+resp.status);
@@ -118,7 +125,7 @@ function mount(){
    status.textContent=data.videos.length?
     data.videos.length+" video(s) disponibles.":"No hay archivos MP4 en la carpeta de producción. El video remoto no se simula como descargado.";
    for(const vid of data.videos){
-    const url="/media/"+encodeURIComponent(vid.filename)+"?token="+encodeURIComponent(token);
+    const url=apiBase+"/media/"+encodeURIComponent(vid.filename)+"?token="+encodeURIComponent(token);
     const card=document.createElement("div");card.className="video-card";
     const player=document.createElement("video");
     player.controls=true;player.preload="metadata";player.playsInline=true;player.src=url;
@@ -143,7 +150,7 @@ function mount(){
        data.voices.length+" archivo(s) de audio encontrados.":
        "No hay archivos compatibles en esa carpeta. No se crearon voces nuevas.";
      for(const voice of data.voices){
-       const src="/voices/"+encodeURIComponent(voice.filename)+"?token="+encodeURIComponent(token);
+       const src=apiBase+"/voices/"+encodeURIComponent(voice.filename)+"?token="+encodeURIComponent(token);
        const card=document.createElement("div");card.className="video-card";
        const label=document.createElement("strong");label.textContent=voice.filename;
        const audio=document.createElement("audio");audio.controls=true;
