@@ -27,7 +27,7 @@ def require_media_tools():
 
 def probe(path, runner=subprocess.run):
     command = ["ffprobe", "-v", "error", "-show_entries",
-               "format=duration:stream=codec_type,width,height",
+               "format=duration:stream=codec_type,width,height,duration",
                "-of", "json", str(path)]
     result = runner(command, text=True, capture_output=True, timeout=60, check=False)
     if result.returncode != 0:
@@ -40,6 +40,21 @@ def probe(path, runner=subprocess.run):
     if not math.isfinite(duration) or duration <= 0:
         raise RuntimeError("Archivo multimedia vacío o inválido.")
     return duration, obj.get("streams", [])
+
+
+def track_duration(streams, kind):
+    # The FFmpeg filters use the first track of each kind. Container duration
+    # can be longer than that track when the other track outlasts it.
+    track = next((s for s in streams if s.get("codec_type") == kind), None)
+    if track is None:
+        raise ValueError("Falta la pista de " + kind + ".")
+    try:
+        duration = float(track.get("duration"))
+    except (TypeError, ValueError) as exc:
+        raise ValueError("No se pudo medir la duración de la pista de " + kind + ".") from exc
+    if not math.isfinite(duration) or duration <= 0:
+        raise ValueError("Duración inválida en la pista de " + kind + ".")
+    return duration
 
 
 def read_manifest(path):
@@ -98,16 +113,17 @@ def build_command(scenes, voice, target, outfile):
 
 def validate_sources(target, scenes, voice):
     for file, seconds in scenes:
-        duration, streams = probe(file)
-        if not any(s.get("codec_type") == "video" for s in streams):
-            raise ValueError("Escena sin pista de video: " + str(file))
+        _, streams = probe(file)
+        try:
+            duration = track_duration(streams, "video")
+        except ValueError as exc:
+            raise ValueError(f"Escena {file.name}: {exc}") from exc
         if duration + 0.05 < seconds:
             raise ValueError(
                 "Escena demasiado corta; evitar congelar imágenes: " + str(file)
             )
-    duration, streams = probe(voice)
-    if not any(s.get("codec_type") == "audio" for s in streams):
-        raise ValueError("Narración sin pista de audio.")
+    _, streams = probe(voice)
+    duration = track_duration(streams, "audio")
     if abs(duration - target) > 0.5:
         raise ValueError(
             f"Duración de narración ({duration:.2f}s) no coincide con "
@@ -118,9 +134,12 @@ def validate_sources(target, scenes, voice):
 def validate_output(outfile, target):
     duration, streams = probe(outfile)
     videos = [s for s in streams if s.get("codec_type") == "video"]
-    has_audio = any(s.get("codec_type") == "audio" for s in streams)
-    if abs(duration - target) > 0.5 or not videos or not has_audio:
-        raise RuntimeError("El MP4 final no cumple duración y pistas de audio/video.")
+    try:
+        lengths = (duration, track_duration(streams, "video"), track_duration(streams, "audio"))
+    except ValueError as exc:
+        raise RuntimeError(f"MP4 final: {exc}") from exc
+    if any(abs(length - target) > 0.5 for length in lengths):
+        raise RuntimeError("El MP4 final no cumple la duración del contenedor y de ambas pistas.")
     if int(videos[0].get("width", 0)) != WIDTH or int(videos[0].get("height", 0)) != HEIGHT:
         raise RuntimeError("La resolución del MP4 no corresponde al perfil 9:16.")
     return duration
@@ -137,13 +156,14 @@ def main():
         target, scenes, voice = read_manifest(args.manifest)
         require_media_tools()
         validate_sources(target, scenes, voice)
-        outfile = args.output.expanduser().resolve()
-        if outfile.exists():
+        outfile = args.output.expanduser().absolute()
+        if outfile.exists() or outfile.is_symlink():
             raise ValueError("El destino ya existe; no se sobrescribe: " + str(outfile))
         if args.dry_run:
             print(json.dumps({
                 "ready": True, "target_seconds": target,
-                "scene_count": len(scenes), "audio_verified": True,
+                "scene_count": len(scenes), "audio_track_duration_verified": True,
+                "speech_review_required": True,
                 "charge_usd": 0
             }, ensure_ascii=False))
             return 0
@@ -160,12 +180,12 @@ def main():
         if result.returncode != 0:
             raise RuntimeError("FFmpeg no completó el montaje: " + result.stderr[-1500:])
         checked_duration = validate_output(tmp, target)
-        os.replace(tmp, outfile)
-        tmp = None
+        os.link(tmp, outfile)
         print(json.dumps({
             "status": "verified", "mp4": str(outfile),
             "duration_seconds": round(checked_duration, 2),
-            "resolution": f"{WIDTH}x{HEIGHT}", "audio": True,
+            "resolution": f"{WIDTH}x{HEIGHT}", "audio_track_duration_verified": True,
+            "speech_review_required": True,
             "charge_usd": 0
         }, ensure_ascii=False, indent=2))
         return 0
