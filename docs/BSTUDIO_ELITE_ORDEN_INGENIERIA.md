@@ -86,7 +86,7 @@ Estados alternativos: `needs_attention`, `failed`, `cancelled`.
 
 ## 9. Trabajo verificable en esta rama
 
-- `tools/bstudio_poyo_recover.py`: recuperación de tarea EXISTENTE por CLI en JSON; archivo completo; rechazo de destinos inseguros; validación mínima MP4 y FFprobe cuando esté disponible.
+- `tools/bstudio_poyo_recover.py`: recuperación de tarea EXISTENTE por CLI en JSON; archivo completo; rechazo de destinos inseguros; validación MP4 con FFprobe antes de conservar el archivo.
 - `tests/test_bstudio_poyo_recover.py`: pruebas unitarias desconectadas de cuentas y sin cargos.
 - `.github/workflows/poyo-recovery-test.yml`: ejecución de pruebas en GitHub Actions, sujetas a que Actions esté habilitado.
 - **No realizado todavía:** ejecución en la Mac, descarga y análisis del video real, ensamblaje de 35 segundos, conexión de voces y despliegue en la aplicación principal. Son hitos sujetos a pruebas, no a suposiciones.
@@ -103,5 +103,7 @@ python3 "$HOME/barriga-studio-elite/tools/bstudio_poyo_recover.py" 0AHQMX2G2T4ZZ
 ```
 
 La clave de PoYo no se vuelve a pegar; la CLI la recupera del llavero. El comando consulta una tarea existente y descarga su MP4 si está disponible; no usa `submit`.
+
+La recuperación exige FFprobe. Comprueba el contenedor, la duración y la pista de video antes de dar al archivo su nombre final. Si ese nombre ya existe, comprueba el archivo sin sobrescribirlo. Las redirecciones solo pueden ir a los dominios multimedia permitidos. La presencia de audio se informa por separado y no certifica que contenga narración.
 
 **No ejecutar repetidamente el bloque completo:** el comando `git worktree add` crea una carpeta nueva y puede fallar si ya existe. Después usar únicamente el último comando de recuperación.

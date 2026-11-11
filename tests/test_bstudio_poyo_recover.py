@@ -52,16 +52,67 @@ class RecoveryTests(unittest.TestCase):
             with self.subTest(url=url), self.assertRaises(ValueError):
                 module.validate_download_url(url)
 
+    def test_redirect_rejects_untrusted_host_before_request(self):
+        handler = module.MediaRedirectHandler()
+        original = module.Request("https://cdn.doculator.org/start")
+        with self.assertRaises(ValueError):
+            handler.redirect_request(original, None, 302, "", {}, "https://elsewhere.example/a.mp4")
+        allowed = "https://cdn.poyo.ai/video.mp4"
+        redirected = handler.redirect_request(original, None, 302, "", {}, allowed)
+        self.assertEqual(redirected.full_url, allowed)
+
     def test_valid_mp4_is_atomic_and_preserved(self):
         video = b"\x00\x00\x00\x18ftypisom" + b"x" * 200
         with tempfile.TemporaryDirectory() as folder:
             destination = Path(folder) / "video.mp4"
-            size = module.save_video(
+            def probe(staged):
+                self.assertFalse(destination.exists())
+                self.assertEqual(staged.read_bytes(), video)
+                return {"duracion_segundos": 5}
+
+            size, details = module.save_video(
                 "https://cdn.doculator.org/videos/t.mp4", destination,
-                opener=lambda *a, **k: FakeResponse(video)
+                opener=lambda *a, **k: FakeResponse(video), probe=probe
             )
             self.assertEqual(size, len(video))
+            self.assertEqual(details["duracion_segundos"], 5)
             self.assertEqual(destination.read_bytes(), video)
+
+    def test_failed_probe_keeps_no_final_or_staging_file(self):
+        video = b"\x00\x00\x00\x18ftypisom" + b"x" * 200
+        with tempfile.TemporaryDirectory() as folder:
+            destination = Path(folder) / "video.mp4"
+            with self.assertRaisesRegex(RuntimeError, "invalid stream"):
+                module.save_video(
+                    "https://cdn.doculator.org/videos/t.mp4", destination,
+                    opener=lambda *a, **k: FakeResponse(video),
+                    probe=mock.Mock(side_effect=RuntimeError("invalid stream"))
+                )
+            self.assertEqual(list(Path(folder).iterdir()), [])
+
+    def test_concurrent_recovery_preserves_existing_file(self):
+        video = b"\x00\x00\x00\x18ftypisom" + b"x" * 200
+        with tempfile.TemporaryDirectory() as folder:
+            destination = Path(folder) / "video.mp4"
+            def competing_recovery(_):
+                destination.write_bytes(b"previous download")
+                return {}
+            with self.assertRaises(FileExistsError):
+                module.save_video(
+                    "https://cdn.doculator.org/videos/t.mp4", destination,
+                    opener=lambda *a, **k: FakeResponse(video), probe=competing_recovery
+                )
+            self.assertEqual(destination.read_bytes(), b"previous download")
+            self.assertEqual(list(Path(folder).iterdir()), [destination])
+
+    def test_probe_rejects_symlink_before_running_ffprobe(self):
+        with tempfile.TemporaryDirectory() as folder:
+            link = Path(folder) / "video.mp4"
+            link.symlink_to("other.mp4")
+            with mock.patch.object(module.subprocess, "run") as run:
+                with self.assertRaises(ValueError):
+                    module.probe_video(link)
+            run.assert_not_called()
 
     def test_non_video_is_rejected(self):
         with tempfile.TemporaryDirectory() as folder:

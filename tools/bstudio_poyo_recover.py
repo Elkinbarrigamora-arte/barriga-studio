@@ -6,6 +6,7 @@ Uses JSON CLI output instead of the truncated human-readable table.
 """
 import argparse
 import json
+import math
 import os
 import re
 import shutil
@@ -14,7 +15,7 @@ import sys
 import tempfile
 from pathlib import Path
 from urllib.parse import urlparse
-from urllib.request import Request, urlopen
+from urllib.request import HTTPRedirectHandler, Request, build_opener
 
 TASK_RE = re.compile(r"^[A-Za-z0-9_-]{8,100}$")
 # Pin the known CLI version; credentials remain in the Mac keyring.
@@ -115,8 +116,19 @@ def read_existing_task(task_id, runner=subprocess.run):
     return parse_task(result.stdout)
 
 
-def save_video(url, destination, opener=urlopen):
+class MediaRedirectHandler(HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        # urllib resolves relative redirects before calling this method.
+        validate_download_url(newurl)
+        return super().redirect_request(req, fp, code, msg, headers, newurl)
+
+
+def save_video(url, destination, opener=None, probe=None):
     validate_download_url(url)
+    if opener is None:
+        opener = build_opener(MediaRedirectHandler()).open
+    if probe is None:
+        probe = probe_video
     destination.parent.mkdir(parents=True, exist_ok=True)
     tmp_name = None
     try:
@@ -141,37 +153,51 @@ def save_video(url, destination, opener=urlopen):
                     if total > MAX_DOWNLOAD:
                         raise ValueError("Descarga supera 250 MB.")
                     out.write(chunk)
+            if content_length is not None and total != int(content_length):
+                raise ValueError("La descarga no coincide con el tamaño anunciado.")
         with open(tmp_name, "rb") as video:
             header = video.read(12)
         if len(header) < 12 or header[4:8] != b"ftyp":
             raise ValueError("PoYo devolvió un archivo que no parece MP4.")
-        os.replace(tmp_name, destination)
-        tmp_name = None
-        return total
+        details = probe(Path(tmp_name))
+        # The staging file is in the same directory. A hard link publishes it
+        # atomically without replacing another recovery or an existing file.
+        os.link(tmp_name, destination)
+        return total, details
     finally:
         if tmp_name and os.path.exists(tmp_name):
             os.unlink(tmp_name)
 
 
 def probe_video(path):
+    if path.is_symlink() or not path.is_file():
+        raise ValueError("La ruta debe contener un archivo MP4 regular.")
     if not shutil.which("ffprobe"):
-        return {"validacion": "MP4 básico validado; ffprobe no disponible"}
+        raise RuntimeError("Se necesita FFprobe para verificar el MP4.")
     result = subprocess.run(
         ["ffprobe", "-v", "error", "-show_entries",
-         "format=duration:stream=codec_type,width,height",
+         "format=format_name,duration:stream=codec_type,width,height",
          "-of", "json", str(path)],
         capture_output=True, text=True, timeout=45, check=False
     )
     if result.returncode != 0:
         raise RuntimeError("ffprobe no pudo validar el archivo MP4.")
     details = json.loads(result.stdout)
+    info = details.get("format", {})
+    if "mp4" not in info.get("format_name", "").split(","):
+        raise RuntimeError("FFprobe no reconoció un contenedor MP4.")
     streams = details.get("streams", [])
-    if not any(s.get("codec_type") == "video" for s in streams):
+    videos = [s for s in streams if s.get("codec_type") == "video"
+              and s.get("width", 0) > 0 and s.get("height", 0) > 0]
+    if not videos:
         raise RuntimeError("El archivo no contiene pista de video.")
+    duration = float(info.get("duration", 0))
+    if not math.isfinite(duration) or duration <= 0:
+        raise RuntimeError("El archivo no tiene una duración de video válida.")
     return {
-        "duracion_segundos": float(details.get("format", {}).get("duration", 0)),
+        "duracion_segundos": duration,
         "tiene_audio": any(s.get("codec_type") == "audio" for s in streams),
-        "video": [s for s in streams if s.get("codec_type") == "video"],
+        "video": videos,
     }
 
 
@@ -194,13 +220,15 @@ def main():
             print("Video disponible. Usa el comando sin --status-only para recuperarlo.")
             return 0
         destination = args.output_dir.expanduser() / ("poyo-" + args.task_id + ".mp4")
-        if destination.is_file():
+        if destination.exists() or destination.is_symlink():
+            details = probe_video(destination)
             print("Archivo ya existe; no se sobrescribe:", destination)
+            print("Validación:", json.dumps(details, ensure_ascii=False))
             return 0
-        size = save_video(url, destination)
+        size, details = save_video(url, destination)
         print("Video descargado:", destination)
         print("Tamaño:", size, "bytes")
-        print("Validación:", json.dumps(probe_video(destination), ensure_ascii=False))
+        print("Validación:", json.dumps(details, ensure_ascii=False))
         return 0
     except (ValueError, RuntimeError, OSError, subprocess.TimeoutExpired) as exc:
         print("Error:", exc, file=sys.stderr)

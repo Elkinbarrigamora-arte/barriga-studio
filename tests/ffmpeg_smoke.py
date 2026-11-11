@@ -1,10 +1,39 @@
 #!/usr/bin/env python3
 """End-to-end local FFmpeg smoke test using synthetic video+audio. No provider cost."""
+import io
 import json
 import subprocess
 import sys
 import tempfile
 from pathlib import Path
+
+
+def check_recovery(source, root):
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tools"))
+    from bstudio_poyo_recover import save_video
+
+    url = "https://cdn.doculator.org/synthetic.mp4"
+
+    class Response(io.BytesIO):
+        headers = {}
+
+        def geturl(self):
+            return url
+
+    raw = source.read_bytes()
+    final = root / "recovered.mp4"
+    size, metadata = save_video(url, final, opener=lambda *a, **kw: Response(raw))
+    if size != len(raw) or final.read_bytes() != raw or not metadata["tiene_audio"]:
+        raise RuntimeError("Recovery did not preserve the verified audiovisual file.")
+    invalid = root / "invalid.mp4"
+    try:
+        save_video(url, invalid, opener=lambda *a, **kw: Response(raw[:32]))
+    except RuntimeError:
+        pass
+    else:
+        raise RuntimeError("Truncated MP4 passed verification.")
+    if invalid.exists() or list(root.glob(".poyo-*.part")):
+        raise RuntimeError("Recovery left behind unverified output.")
 
 
 def run(*args):
@@ -36,7 +65,9 @@ def main():
         run(sys.executable, str(assembler), str(manifest), "--output", str(outfile))
         if not outfile.exists() or outfile.stat().st_size < 100:
             raise RuntimeError("Final MP4 missing or empty.")
+        check_recovery(outfile, root)
         print("FFmpeg smoke test passed: video + audio + exact duration.")
+        print("Recovery smoke passed: valid MP4 preserved, truncated MP4 rejected.")
 
 
 if __name__ == "__main__":

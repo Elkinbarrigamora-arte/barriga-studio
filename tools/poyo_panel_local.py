@@ -119,15 +119,16 @@ class Handler(BaseHTTPRequestHandler):
                 url = find_video_url(result)
                 validate_download_url(url)
                 dest = Path.home() / "Movies" / "BarrigaStudio" / ("poyo-" + task_id + ".mp4")
-                if dest.exists():
+                if dest.exists() or dest.is_symlink():
                     return self.send(200, {
                         "estado": "archivo_ya_existente", "ruta": str(dest),
-                        "nota": "No se sobreescribió. Confirma la integridad del archivo existente.",
+                        "validacion": probe_video(dest),
+                        "nota": "No se sobreescribió.",
                     })
-                size = save_video(url, dest)
+                size, details = save_video(url, dest)
                 return self.send(200, {
                     "estado": "mp4_descargado", "ruta": str(dest),
-                    "bytes": size, "validacion": probe_video(dest),
+                    "bytes": size, "validacion": details,
                     "credito_generacion_adicional": 0,
                 })
             prompt = payload.get("prompt", "")
