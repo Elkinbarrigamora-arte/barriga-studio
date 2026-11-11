@@ -105,17 +105,39 @@ def import_existing_mp4(stream, media_dir, filename, size):
 
 
 
+def select_script_model(installed_names, requested):
+    """Select an installed text-capable Ollama model, never download one silently."""
+    available = [n for n in installed_names if isinstance(n, str) and n]
+    if requested != "auto":
+        return next((n for n in available if n == requested or
+                     (":" not in requested and n == requested + ":latest")), None)
+    preferred = ("qwen2.5-coder:14b", "qwen2.5:14b", "qwen3:14b",
+                 "qwen2.5:7b", "llama3.2:3b", "llama3.1:8b")
+    for candidate in preferred:
+        if candidate in available:
+            return candidate
+    # Avoid choosing an embedding model as a scriptwriter.
+    return next((n for n in available if not any(
+        marker in n.lower() for marker in ("embed", "nomic", "bge-", "rerank")
+    )), None)
+
+
 def ollama_health(model=MODEL, opener=urlopen):
-    """Check the local model inventory; do not infer an answer from a TCP port."""
+    """Check real installed models; auto mode selects only models already installed."""
     try:
         with opener("http://127.0.0.1:11434/api/tags", timeout=3) as response:
             obj = json.load(response)
         names = [entry.get("name", "") for entry in obj.get("models", [])
                  if isinstance(entry, dict)]
-        ready = model in names or model + ":latest" in names
-        return {"state": "ready" if ready else "missing_model",
-                "detail": "Modelo Ollama confirmado." if ready
-                else "Ollama responde, pero el modelo requerido no está instalado.",
+        selected = select_script_model(names, model)
+        if selected:
+            return {"state": "ready",
+                    "detail": "Modelo local disponible: " + selected,
+                    "model": selected}
+        return {"state": "missing_model",
+                "detail": "Ollama responde, pero no hay un modelo de texto compatible instalado."
+                if model == "auto" else
+                "El modelo solicitado no está instalado: " + model,
                 "model": model}
     except (OSError, ValueError, TypeError, KeyError):
         return {"state": "offline", "detail":
@@ -364,10 +386,12 @@ def make_handler(studio, media_dir, runtime_asset, token, port, model, voices_di
                     idea = body.get("idea", "")
                     if not isinstance(idea, str) or not 2 <= len(idea.strip()) <= 2400:
                         return self.send_json(400, {"error": "Idea entre 2 y 2400 caracteres."})
-                    if ollama_health(model)["state"] != "ready":
+                    health = ollama_health(model)
+                    if health["state"] != "ready":
                         return self.send_json(503, {
-                            "error": "Barriga IA no está listo: revisa Ollama y el modelo " + model})
-                    result = generate_ollama_script(idea.strip(), model)
+                            "error": "Barriga IA no está listo: " + health.get("detail", "")})
+                    selected_model = health.get("model") or model
+                    result = generate_ollama_script(idea.strip(), selected_model)
                     return self.send_json(200, result)
                 task_id = body.get("task_id", "")
                 if not isinstance(task_id, str) or not TASK_RE.fullmatch(task_id):
@@ -406,7 +430,7 @@ def main():
                         default=Path.home() / "Movies" / "BarrigaStudio")
     parser.add_argument("--voices-dir", type=Path)
     parser.add_argument("--port", type=int, default=8766)
-    parser.add_argument("--model", default=MODEL)
+    parser.add_argument("--model", default="auto", help="Modelo Ollama instalado; auto detecta uno compatible")
     parser.add_argument("--task-id", default="", help="Tarea PoYo existente para mostrar en el estudio")
     parser.add_argument("--no-browser", action="store_true")
     args = parser.parse_args()
