@@ -16,6 +16,8 @@ on:
       - "tools/bstudio_unified_bridge.py"
       - "tests/test_bstudio_unified_bridge.py"
       - "assets/bstudio-runtime.js"
+      - "bridge-browser-tests/**"
+      - "playwright.bridge.config.cjs"
       - "browser-tests/**"
       - "playwright.config.cjs"
       - "package.json"
@@ -60,6 +62,8 @@ jobs:
         run: npm install --no-audit --no-fund
       - name: Run real Chromium UI tests
         run: npm run test:ui
+      - name: Run integrated app browser controls
+        run: npm run test:bridge
       - name: Upload failing browser traces
         if: failure()
         uses: actions/upload-artifact@v4
