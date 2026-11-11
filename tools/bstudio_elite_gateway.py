@@ -194,10 +194,13 @@ def make_gateway_handler(media_dir, runtime_path, token, listen_port,
                     self.wfile.write(data)
                 else:
                     while True:
-                        chunk = upstream.read(128 * 1024)
+                        # read1 returns available bytes immediately: a long-lived
+                        # SSE stream must not wait for 128 KiB before flushing.
+                        chunk = upstream.read1(128 * 1024)
                         if not chunk:
                             break
                         self.wfile.write(chunk)
+                        self.wfile.flush()
             except (OSError, ValueError, UnicodeError,
                     http.client.HTTPException) as exc:
                 # Never turn network failure into a successful-looking output.
