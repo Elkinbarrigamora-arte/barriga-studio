@@ -10,10 +10,12 @@
 import argparse
 import json
 import mimetypes
+import os
 import re
 import secrets
 import socket
 import sys
+import tempfile
 import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -30,6 +32,54 @@ HOST = "127.0.0.1"
 MODEL = "qwen2.5-coder:14b"
 ALLOWED_MEDIA = {".mp4", ".mov", ".m4v"}
 NAME_RE = re.compile(r"^[^/\\\x00-\x1f]{1,200}\.(mp4|mov|m4v)$", re.IGNORECASE)
+MAX_IMPORT_BYTES = 250 * 1024 * 1024
+
+
+def import_existing_mp4(stream, media_dir, filename, size):
+    """Copy an owner-selected MP4 into the local gallery without overwriting files.
+
+    Never contacts video providers, never sends jobs, and never deletes source media.
+    An exclusive hard link commits the temporary copy only if the destination is free.
+    """
+    if (not isinstance(filename, str) or not NAME_RE.fullmatch(filename)
+            or not filename.lower().endswith(".mp4")
+            or filename.startswith(".") or Path(filename).name != filename):
+        raise ValueError("Selecciona un archivo MP4 con un nombre válido.")
+    if not isinstance(size, int) or not 12 <= size <= MAX_IMPORT_BYTES:
+        raise ValueError("El MP4 debe medir entre 12 bytes y 250 MB.")
+    media_dir.mkdir(parents=True, exist_ok=True)
+    temporary = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="wb", dir=media_dir, prefix=".bstudio-import-",
+            suffix=".part", delete=False
+        ) as out:
+            temporary = Path(out.name)
+            remaining = size
+            while remaining:
+                chunk = stream.read(min(128 * 1024, remaining))
+                if not chunk:
+                    raise ValueError("La carga llegó incompleta. No se guardó ningún video.")
+                out.write(chunk)
+                remaining -= len(chunk)
+        with temporary.open("rb") as uploaded:
+            header = uploaded.read(12)
+        if header[4:8] != b"ftyp":
+            raise ValueError("El archivo no tiene encabezado MP4 válido.")
+        stem = Path(filename).stem
+        for number in range(1001):
+            output_name = filename if number == 0 else f"{stem}-{number}.mp4"
+            candidate = media_dir / output_name
+            try:
+                os.link(temporary, candidate)
+                return {"filename": output_name, "bytes": size}
+            except FileExistsError:
+                continue
+        raise RuntimeError("Demasiadas copias con el mismo nombre.")
+    finally:
+        if temporary is not None:
+            temporary.unlink(missing_ok=True)
+
 
 
 def ollama_health(model=MODEL, opener=urlopen):
@@ -248,8 +298,22 @@ def make_handler(studio, media_dir, runtime_asset, token, port, model, voices_di
                     not self.checked_fetch_site() or not self.checked_token():
                 return self.send_json(403, {"error": "Origen o sesión no autorizados."})
             route = urlsplit(self.path).path
-            if route not in ("/api/guion", "/api/recover"):
+            if route not in ("/api/guion", "/api/recover", "/api/import-video"):
                 return self.send_json(404, {"error": "Ruta inexistente."})
+            if route == "/api/import-video":
+                if self.headers.get("Content-Type", "").split(";")[0] != "video/mp4":
+                    return self.send_json(415, {"error": "Solo se aceptan archivos MP4."})
+                try:
+                    length = int(self.headers.get("Content-Length", "0"))
+                    filename = unquote(self.headers.get("X-Barriga-Filename", ""))
+                    result = import_existing_mp4(self.rfile, media_dir, filename, length)
+                    return self.send_json(201, {
+                        "status": "imported", "video": result["filename"],
+                        "bytes": result["bytes"], "paid_credits": 0,
+                        "message": "Copia local creada; el archivo original no se modificó."
+                    })
+                except (ValueError, OSError, RuntimeError) as exc:
+                    return self.send_json(400, {"error": str(exc)})
             if self.headers.get("Content-Type", "").split(";")[0] != "application/json":
                 return self.send_json(415, {"error": "Solo JSON."})
             try:
