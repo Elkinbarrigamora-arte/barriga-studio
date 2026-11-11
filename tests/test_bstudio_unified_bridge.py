@@ -27,6 +27,9 @@ class UnifiedBridgeTests(unittest.TestCase):
         self.media = root / "video"
         self.studio.mkdir()
         self.media.mkdir()
+        self.voices = root / "voices"
+        self.voices.mkdir()
+        (self.voices / "voz-original.mp3").write_bytes(b"ID3" + b"a" * 120)
         (self.studio / "index.html").write_text(
             '<!doctype html><title>Mi estudio</title><main id="crear"></main></body>',
             encoding="utf-8")
@@ -45,7 +48,7 @@ class UnifiedBridgeTests(unittest.TestCase):
         self.server = ThreadingHTTPServer(
             ("127.0.0.1", port),
             bridge.make_handler(self.studio, self.media, self.runtime,
-                                self.token, port, "qwen2.5-coder:14b", None))
+                                self.token, port, "qwen2.5-coder:14b", self.voices))
         self.worker = threading.Thread(target=self.server.serve_forever, daemon=True)
         self.worker.start()
 
@@ -250,6 +253,39 @@ class UnifiedBridgeTests(unittest.TestCase):
         conn.close()
         self.assertEqual(message["paid_credits"], 0)
         self.assertIn("otro-video.mp4", [entry["filename"] for entry in bridge.list_media(self.media)])
+
+    def test_voices_endpoint_is_authenticated(self):
+        status, _, _ = self.send("/api/voices")
+        self.assertEqual(status, 403)
+
+    def test_voice_inventory_lists_real_original_audio(self):
+        status, _, body = self.send("/api/voices", token=self.token)
+        self.assertEqual(status, 200)
+        payload = json.loads(body)
+        self.assertTrue(payload["configured"])
+        self.assertEqual(payload["voices"][0]["filename"], "voz-original.mp3")
+
+    def test_voice_playback_streams_existing_bytes(self):
+        status, _, body = self.send("/voices/voz-original.mp3?token=" + self.token)
+        self.assertEqual(status, 200)
+        self.assertEqual(body, (self.voices / "voz-original.mp3").read_bytes())
+
+    def test_voice_byte_range_works_in_safari(self):
+        status, headers, body = self.send(
+            "/voices/voz-original.mp3?token=" + self.token,
+            headers={"Range": "bytes=0-2"})
+        self.assertEqual(status, 206)
+        self.assertEqual(body, b"ID3")
+        self.assertEqual(headers.get("Accept-Ranges"), "bytes")
+
+    def test_voice_path_traversal_is_rejected(self):
+        status, _, _ = self.send("/voices/%2e%2e%2fsecreto.mp3?token=" + self.token)
+        self.assertEqual(status, 404)
+
+    def test_voice_symlink_is_never_in_inventory(self):
+        (self.voices / "otro.mp3").symlink_to(self.voices / "voz-original.mp3")
+        entries = bridge.list_voices(self.voices)
+        self.assertEqual([x["filename"] for x in entries], ["voz-original.mp3"])
 
     def test_head_response_for_video(self):
         status, headers, body = self.send("/media/video-real.mp4?token=" + self.token, "HEAD")
