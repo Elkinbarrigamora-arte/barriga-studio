@@ -33,6 +33,29 @@ MODEL = "qwen2.5-coder:14b"
 ALLOWED_MEDIA = {".mp4", ".mov", ".m4v"}
 NAME_RE = re.compile(r"^[^/\\\x00-\x1f]{1,200}\.(mp4|mov|m4v)$", re.IGNORECASE)
 MAX_IMPORT_BYTES = 250 * 1024 * 1024
+VOICE_RE = re.compile(r"^[^/\\\x00-\x1f]{1,200}\.(wav|mp3|m4a|aac)$", re.IGNORECASE)
+
+
+def list_voices(voices_dir):
+    """List existing local audio only, without reading or changing source files."""
+    if voices_dir is None or not voices_dir.is_dir():
+        return []
+    results = []
+    for path in voices_dir.iterdir():
+        try:
+            if (path.is_symlink() or not path.is_file()
+                    or not VOICE_RE.fullmatch(path.name)):
+                continue
+            stat = path.stat()
+            if stat.st_size < 12:
+                continue
+            results.append({"filename": path.name, "bytes": stat.st_size,
+                            "modified": int(stat.st_mtime), "type": "audio"})
+        except OSError:
+            continue
+    results.sort(key=lambda item: item["modified"], reverse=True)
+    return results[:150]
+
 
 
 def import_existing_mp4(stream, media_dir, filename, size):
@@ -122,11 +145,7 @@ def list_media(media_dir):
 
 def engine_inventory(model, voices_dir):
     ollama = ollama_health(model)
-    voices = []
-    if voices_dir and voices_dir.is_dir():
-        voices = [p for p in voices_dir.iterdir() if p.is_file()
-                  and not p.is_symlink() and p.suffix.lower() in
-                  {".wav", ".mp3", ".m4a", ".aac"}]
+    voices = list_voices(voices_dir)
     return [
         {"id": "barriga-ia", "name": "Barriga IA · Ollama", **ollama,
          "operation": "script"},
@@ -221,13 +240,18 @@ def make_handler(studio, media_dir, runtime_asset, token, port, model, voices_di
                 return self.send_bytes(200, asset.read_bytes(),
                                        "text/css; charset=utf-8" if basename.endswith(".css")
                                        else "text/javascript; charset=utf-8")
-            if route == "/api/engines" or route == "/api/videos" or route == "/api/health":
+            if route in ("/api/engines", "/api/videos", "/api/voices", "/api/health"):
                 if not self.checked_token():
                     return self.send_json(403, {"error": "Sesión local no autorizada."})
                 if route == "/api/engines":
                     return self.send_json(200, {"engines": engine_inventory(model, voices_dir)})
                 if route == "/api/videos":
                     return self.send_json(200, {"videos": list_media(media_dir)})
+                if route == "/api/voices":
+                    return self.send_json(200, {
+                        "voices": list_voices(voices_dir),
+                        "configured": bool(voices_dir and voices_dir.is_dir()),
+                    })
                 return self.send_json(200, {
                     "studio": "running", "local_only": True, "paid_submissions": False,
                     "script_engine": ollama_health(model), "media_files": len(list_media(media_dir))})
@@ -237,7 +261,14 @@ def make_handler(studio, media_dir, runtime_asset, token, port, model, voices_di
                 supplied = parse_qs(url.query).get("token", [""])[0]
                 if not secrets.compare_digest(supplied, token):
                     return self.send_json(403, {"error": "Vista previa no autorizada."})
-                return self.serve_video(unquote(route[len("/media/"):]))
+                return self.serve_file(unquote(route[len("/media/"):]), media_dir, NAME_RE)
+            if route.startswith("/voices/"):
+                supplied = parse_qs(url.query).get("token", [""])[0]
+                if not secrets.compare_digest(supplied, token):
+                    return self.send_json(403, {"error": "Vista previa no autorizada."})
+                if voices_dir is None:
+                    return self.send_json(404, {"error": "Carpeta de voces no configurada."})
+                return self.serve_file(unquote(route[len("/voices/"):]), voices_dir, VOICE_RE)
             return self.send_json(404, {"error": "Ruta inexistente."})
 
         def do_HEAD(self):
@@ -247,13 +278,19 @@ def make_handler(studio, media_dir, runtime_asset, token, port, model, voices_di
             if url.path.startswith("/media/"):
                 supplied = parse_qs(url.query).get("token", [""])[0]
                 if secrets.compare_digest(supplied, token):
-                    return self.serve_video(unquote(url.path[len("/media/"):]), head_only=True)
+                    return self.serve_file(
+                        unquote(url.path[len("/media/"):]), media_dir, NAME_RE, head_only=True)
+            if url.path.startswith("/voices/") and voices_dir is not None:
+                supplied = parse_qs(url.query).get("token", [""])[0]
+                if secrets.compare_digest(supplied, token):
+                    return self.serve_file(
+                        unquote(url.path[len("/voices/"):]), voices_dir, VOICE_RE, head_only=True)
             return self.headers_for(404, 0, "text/plain")
 
-        def serve_video(self, name, head_only=False):
-            if not NAME_RE.fullmatch(name):
+        def serve_file(self, name, folder, name_pattern, head_only=False):
+            if not name_pattern.fullmatch(name):
                 return self.headers_for(404, 0, "text/plain")
-            file = media_dir / name
+            file = folder / name
             if file.is_symlink() or not file.is_file():
                 return self.headers_for(404, 0, "text/plain")
             try:
