@@ -1,5 +1,6 @@
 """Integration coverage for one Studio bridge; fully offline and no paid requests."""
 import http.client
+import io
 import importlib.util
 import json
 import socket
@@ -183,6 +184,72 @@ class UnifiedBridgeTests(unittest.TestCase):
         status, _, _ = self.send("/media/video-real.mp4?token=" + self.token,
                                  headers={"Sec-Fetch-Site": "cross-site"})
         self.assertEqual(status, 403)
+
+    def test_import_selected_mp4_without_deleting_source(self):
+        original = b"\x00\x00\x00\x18ftypisom" + b"z" * 80
+        result = bridge.import_existing_mp4(io.BytesIO(original), self.media,
+                                             "nuevo-video.mp4", len(original))
+        self.assertEqual(result["filename"], "nuevo-video.mp4")
+        self.assertEqual((self.media / "nuevo-video.mp4").read_bytes(), original)
+        self.assertEqual(self.movie.read_bytes()[:12], b"\x00\x00\x00\x18ftypisom")
+
+    def test_import_duplicate_name_does_not_overwrite(self):
+        original = b"\x00\x00\x00\x18ftypisom" + b"k" * 40
+        self.media.joinpath("nuevo-video.mp4").write_bytes(b"ORIGINAL")
+        result = bridge.import_existing_mp4(io.BytesIO(original), self.media,
+                                             "nuevo-video.mp4", len(original))
+        self.assertEqual(result["filename"], "nuevo-video-1.mp4")
+        self.assertEqual(self.media.joinpath("nuevo-video.mp4").read_bytes(), b"ORIGINAL")
+
+    def test_import_rejects_non_mp4_bytes(self):
+        with self.assertRaises(ValueError):
+            bridge.import_existing_mp4(io.BytesIO(b"not-a-video!" + b"x" * 100),
+                                         self.media, "fake.mp4", 112)
+        self.assertFalse((self.media / "fake.mp4").exists())
+        self.assertFalse(list(self.media.glob(".bstudio-import-*")))
+
+    def test_import_rejects_path_traversal(self):
+        with self.assertRaises(ValueError):
+            bridge.import_existing_mp4(io.BytesIO(b"x"*40), self.media,
+                                         "../private.mp4", 40)
+
+    def test_import_rejects_too_large(self):
+        with self.assertRaises(ValueError):
+            bridge.import_existing_mp4(io.BytesIO(b"x"*40), self.media,
+                                         "large.mp4", bridge.MAX_IMPORT_BYTES + 1)
+
+    def test_import_rejects_incomplete_stream_and_cleans_temp(self):
+        with self.assertRaises(ValueError):
+            bridge.import_existing_mp4(io.BytesIO(b"\x00\x00\x00\x18ftypisom"),
+                                         self.media, "incomplete.mp4", 200)
+        self.assertFalse((self.media / "incomplete.mp4").exists())
+        self.assertFalse(list(self.media.glob(".bstudio-import-*")))
+
+    def test_import_api_denies_requests_without_session(self):
+        conn = http.client.HTTPConnection("127.0.0.1", self.port, timeout=5)
+        conn.request("POST", "/api/import-video", body=b"\x00\x00\x00\x18ftypisom",
+                     headers={"Content-Type": "video/mp4",
+                              "X-Barriga-Filename": "new.mp4",
+                              "Origin": "http://127.0.0.1:" + str(self.port)})
+        reply = conn.getresponse()
+        self.assertEqual(reply.status, 403)
+        reply.read()
+        conn.close()
+
+    def test_import_api_uses_existing_session_and_lists_video(self):
+        contents = b"\x00\x00\x00\x18ftypisom" + b"a" * 64
+        conn = http.client.HTTPConnection("127.0.0.1", self.port, timeout=5)
+        conn.request("POST", "/api/import-video", body=contents,
+                     headers={"Content-Type": "video/mp4",
+                              "X-Barriga-Filename": "otro-video.mp4",
+                              "X-Barriga-Token": self.token,
+                              "Origin": "http://127.0.0.1:" + str(self.port)})
+        reply = conn.getresponse()
+        self.assertEqual(reply.status, 201)
+        message = json.loads(reply.read())
+        conn.close()
+        self.assertEqual(message["paid_credits"], 0)
+        self.assertIn("otro-video.mp4", [entry["filename"] for entry in bridge.list_media(self.media)])
 
     def test_head_response_for_video(self):
         status, headers, body = self.send("/media/video-real.mp4?token=" + self.token, "HEAD")
