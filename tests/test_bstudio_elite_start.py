@@ -1,4 +1,5 @@
 """Checks for guarded launch of the owner's single real /studio app."""
+import io
 import sys
 import tempfile
 import unittest
@@ -86,7 +87,24 @@ class EliteLauncherTests(unittest.TestCase):
             with self.assertRaises(SystemExit) as err:
                 start.main(self.argv)
         gw.assert_not_called()
-        self.assertIn("se detuvo", str(err.exception))
+        self.assertIn("terminó", str(err.exception))
+
+    def test_startup_failure_classifies_missing_module_without_leaking_secret(self):
+        log = io.BytesIO(
+            b"secret sk-test-DO-NOT-SHARE\\n"
+            b"ModuleNotFoundError: No module named 'internal_private'\\n")
+        reason = start.startup_failure_reason(log)
+        self.assertIn("ModuleNotFoundError", reason)
+        self.assertNotIn("sk-test", reason)
+        self.assertNotIn("internal_private", reason)
+
+    def test_startup_failure_classifies_busy_internal_port(self):
+        log = io.BytesIO(b"OSError: [Errno 48] Address already in use\\n")
+        self.assertIn("ocupado", start.startup_failure_reason(log))
+
+    def test_startup_failure_does_not_echo_unrecognised_tracebacks(self):
+        log = io.BytesIO(b"SECRETO=12345\\nError secreto\\n")
+        self.assertNotIn("SECRETO", start.startup_failure_reason(log))
 
     def test_http_readiness_never_claims_port_open_as_studio_ready(self):
         class Response:
