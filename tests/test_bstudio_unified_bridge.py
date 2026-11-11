@@ -287,6 +287,35 @@ class UnifiedBridgeTests(unittest.TestCase):
         entries = bridge.list_voices(self.voices)
         self.assertEqual([x["filename"] for x in entries], ["voz-original.mp3"])
 
+    def test_auto_model_prefers_installed_qwen(self):
+        selected = bridge.select_script_model(
+            ["llama3.2:3b", "qwen2.5-coder:14b"], "auto")
+        self.assertEqual(selected, "qwen2.5-coder:14b")
+
+    def test_auto_model_skips_embedding_models(self):
+        selected = bridge.select_script_model(
+            ["nomic-embed-text:latest", "custom-story:7b"], "auto")
+        self.assertEqual(selected, "custom-story:7b")
+
+    def test_auto_model_refuses_embedding_only(self):
+        self.assertIsNone(bridge.select_script_model(
+            ["nomic-embed-text:latest"], "auto"))
+
+    def test_explicit_model_never_silently_switches(self):
+        self.assertIsNone(bridge.select_script_model(
+            ["qwen3:14b"], "qwen2.5-coder:14b"))
+
+    def test_guion_uses_selected_installed_model(self):
+        payload = {"gancho": "Inicio", "historia": "Historia", "oferta_cierre": "Final",
+                   "modelo": "qwen3:14b", "segundos": 1.2}
+        with mock.patch.object(bridge, "ollama_health",
+                               return_value={"state": "ready", "model": "qwen3:14b"}), \
+             mock.patch.object(bridge, "generate_ollama_script", return_value=payload) as fn:
+            status, _, _ = self.send("/api/guion", "POST",
+                                      {"idea": "Historia del oeste"}, token=self.token)
+        self.assertEqual(status, 200)
+        fn.assert_called_once_with("Historia del oeste", "qwen3:14b")
+
     def test_head_response_for_video(self):
         status, headers, body = self.send("/media/video-real.mp4?token=" + self.token, "HEAD")
         self.assertEqual(status, 200)
