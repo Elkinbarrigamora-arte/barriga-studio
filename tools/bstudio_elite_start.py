@@ -42,6 +42,30 @@ def is_http_studio_ready(port):
         return False
 
 
+def startup_failure_reason(log):
+    """Return a safe error category without leaking the original server log."""
+    try:
+        log.flush()
+        log.seek(0)
+        tail = log.read()[-32768:].decode("utf-8", errors="replace")
+        for line in reversed(tail.splitlines()):
+            if "ModuleNotFoundError:" in line:
+                return "Dependencia Python ausente (ModuleNotFoundError)."
+            if "ImportError:" in line:
+                return "Fallo al importar un módulo del Studio (ImportError)."
+            if "SyntaxError:" in line or "IndentationError:" in line:
+                return "Error de sintaxis en el servidor original."
+            if "PermissionError:" in line:
+                return "Permiso insuficiente para iniciar el servidor."
+            if "Address already in use" in line:
+                return "El puerto interno ya está ocupado."
+            if "FileNotFoundError:" in line:
+                return "Falta un archivo requerido por el servidor original."
+        return "Error interno del servidor original; requiere diagnóstico local."
+    except (OSError, ValueError):
+        return "No se pudo recuperar el diagnóstico del proceso."
+
+
 def find_interpreter(studio):
     local_python = studio / ".venv" / "bin" / "python"
     return str(local_python) if local_python.is_file() else sys.executable
@@ -91,17 +115,29 @@ def main(argv=None):
     # The existing application is not modified, copied into GitHub or deleted.
     # It owns all its original data and project paths, and still runs from its cwd.
     command = [python, str(central), "--puerto", str(args.internal_port)]
-    child = subprocess.Popen(
-        command, cwd=str(studio), stdin=subprocess.DEVNULL,
-        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-    )
+    # Capture diagnostics in an anonymous temporary file. The original
+    # central server may include sensitive paths or credentials in its logs:
+    # do not write them to GitHub, the project folder, or the console.
+    startup_log = tempfile.TemporaryFile(mode="w+b")
+    try:
+        child = subprocess.Popen(
+            command, cwd=str(studio), stdin=subprocess.DEVNULL,
+            stdout=startup_log, stderr=subprocess.STDOUT,
+        )
+    except OSError as exc:
+        startup_log.close()
+        raise SystemExit(
+            "BLOQUEADO: no pudo arrancar el servidor original (" +
+            type(exc).__name__ + "). Verifica Python y el entorno virtual."
+        )
     try:
         healthy = False
         for _ in range(100):
             if child.poll() is not None:
                 raise RuntimeError(
-                    "El puente central existente se detuvo al iniciar. "
-                    "Revisa sus dependencias o inícialo manualmente para diagnosticarlo."
+                    "El servidor central original terminó antes de responder. " +
+                    startup_failure_reason(startup_log) +
+                    " Ningún archivo ni proyecto fue reemplazado."
                 )
             if is_http_studio_ready(args.internal_port):
                 healthy = True
@@ -139,6 +175,7 @@ def main(argv=None):
             except subprocess.TimeoutExpired:
                 child.kill()
                 child.wait(timeout=3)
+        startup_log.close()
 
 
 if __name__=="__main__":
