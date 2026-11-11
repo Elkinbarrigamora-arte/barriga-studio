@@ -21,6 +21,10 @@ test("04 Ollama offline no se representa como listo", async ({page})=>{
   await expect(pane(page).locator("#bst-script")).toBeDisabled();
 });
 test("05 se informa cuando la carpeta no tiene MP4", async ({page})=>{
+  // Estado vacío reproducible, independiente de importaciones de otro navegador.
+  await page.route("**/api/videos", async route=>route.fulfill({
+    status:200,contentType:"application/json",body:JSON.stringify({videos:[]})
+  }));
   await page.goto("/");
   await expect(pane(page).locator("#bst-videos-status")).toContainText("No hay archivos MP4");
 });
@@ -60,7 +64,7 @@ test("10 galería renderiza un video solo cuando recibe archivo listado", async 
   }));
   await page.goto("/");
   await expect(pane(page).locator("video")).toHaveCount(1);
-  await expect(pane(page).getByRole("link",{name:"Descargar video"})).toBeVisible();
+  await expect(pane(page).getByRole("link",{name:"Descargar video"}).first()).toBeVisible();
 });
 test("11 medios usan sesión privada al construir la URL", async ({page})=>{
   await page.route("**/api/videos",async route=>route.fulfill({
