@@ -114,7 +114,7 @@ test("15 importar MP4 existente lo hace visible y descargable",async ({page})=>{
   await pane(page).getByRole("button",{name:"Importar video sin generar otro"}).click();
   await expect(pane(page).locator("#bst-import-status")).toContainText("MP4 importado");
   await expect(pane(page).locator(".video-card strong",{hasText:"mi-video.mp4"})).toBeVisible();
-  await expect(pane(page).getByRole("link",{name:"Descargar video"})).toBeVisible();
+  await expect(pane(page).getByRole("link",{name:"Descargar video"}).first()).toBeVisible();
 });
 test("16 importar otra vez conserva primer archivo y crea copia independiente",async ({page})=>{
   await page.goto("/");
