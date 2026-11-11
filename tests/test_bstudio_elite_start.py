@@ -51,8 +51,8 @@ class EliteLauncherTests(unittest.TestCase):
 
     def test_vendored_runtime_module_required_before_start(self):
         with mock.patch.object(start, "port_is_in_use", return_value=False):
-            with mock.patch.object(start.Path, "is_file", side_effect=lambda p: 
-                                   "bstudio-runtime.js" not in str(p)):
+            with mock.patch.object(start.Path, "is_file", autospec=True,
+                                   side_effect=lambda p: "bstudio-runtime.js" not in str(p)):
                 with self.assertRaises(SystemExit) as err:
                     start.main(self.argv)
         self.assertIn("Falta", str(err.exception)) if "Falta" in str(err.exception) else self.assertIn("falta", str(err.exception))
