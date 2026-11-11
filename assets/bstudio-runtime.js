@@ -55,6 +55,11 @@ function mount(){
  <div class="wide"><h3>🎞️ Videos generados · Galería MP4</h3>
  <p>Se muestran únicamente videos reales descargados a la carpeta de producciones de la Mac.</p>
  <div class="actions"><button id="bst-refresh" class="secondary">Actualizar galería</button></div>
+ <label for="bst-upload">Importar MP4 existente desde mi Mac</label>
+ <input id="bst-upload" type="file" accept="video/mp4,.mp4" />
+ <div class="actions"><button id="bst-import">Importar video sin generar otro</button></div>
+ <p>Se crea una copia en la galería local. Tu archivo original se conserva; máximo 250 MB.</p>
+ <div class="status" id="bst-import-status" role="status">Selecciona un MP4 que ya tengas descargado.</div>
  <div class="status" id="bst-videos-status" role="status">Buscando MP4...</div>
  <div class="videos" id="bst-videos"></div></div>
  <div class="wide"><h3>☁️ Recuperar video existente de PoYo</h3>
@@ -153,6 +158,27 @@ function mount(){
   }catch(err){
    recoveryStatus.textContent="No se recuperó: "+err.message+". No se generó otra tarea.";
   }finally{recover.disabled=false;}
+ });
+ el("bst-import").addEventListener("click",async()=>{
+  const status=el("bst-import-status"),button=el("bst-import");
+  const selected=el("bst-upload").files?.[0];
+  if(!selected){status.textContent="Selecciona primero un archivo MP4.";return;}
+  if(!/\.mp4$/i.test(selected.name)||selected.size<12||
+     selected.size>250*1024*1024){
+    status.textContent="Solo se admiten MP4 de hasta 250 MB.";return;
+  }
+  button.disabled=true;status.textContent="Copiando video a la galería local...";
+  try{
+    const result=await api("/api/import-video",{
+      method:"POST",headers:{"Content-Type":"video/mp4",
+       "X-Barriga-Filename":encodeURIComponent(selected.name)},
+      body:selected
+    });
+    status.textContent="MP4 importado: "+result.video+
+      ". Tu archivo original está intacto.";
+    await updateVideos();
+  }catch(err){status.textContent="No se pudo importar: "+err.message;}
+  finally{button.disabled=false;}
  });
  el("bst-check").addEventListener("click",updateEngines);
  el("bst-refresh").addEventListener("click",updateVideos);
