@@ -99,3 +99,34 @@ test("14 guion generado actualiza el editor solo tras respuesta real",async ({pa
   await expect(pane(page).locator("#bst-output")).toHaveValue(/Historia completa/);
   await expect(page.locator("#script")).toHaveValue(/Gancho verdadero/);
 });
+
+
+test("15 importar MP4 existente lo hace visible y descargable",async ({page})=>{
+  await page.goto("/");
+  const data=Buffer.concat([Buffer.from([0,0,0,24]),Buffer.from("ftypisom"),Buffer.alloc(70,12)]);
+  await pane(page).locator("#bst-upload").setInputFiles({
+    name:"mi-video.mp4",mimeType:"video/mp4",buffer:data
+  });
+  await pane(page).getByRole("button",{name:"Importar video sin generar otro"}).click();
+  await expect(pane(page).locator("#bst-import-status")).toContainText("MP4 importado");
+  await expect(pane(page).locator(".video-card strong",{hasText:"mi-video.mp4"})).toBeVisible();
+  await expect(pane(page).getByRole("link",{name:"Descargar video"})).toBeVisible();
+});
+test("16 importar otra vez conserva primer archivo y crea copia independiente",async ({page})=>{
+  await page.goto("/");
+  const data=Buffer.concat([Buffer.from([0,0,0,24]),Buffer.from("ftypisom"),Buffer.alloc(65,12)]);
+  for(let i=0;i<2;i++){
+    await pane(page).locator("#bst-upload").setInputFiles({
+      name:"duplicable.mp4",mimeType:"video/mp4",buffer:data
+    });
+    await pane(page).getByRole("button",{name:"Importar video sin generar otro"}).click();
+    await expect(pane(page).locator("#bst-import-status")).toContainText("MP4 importado");
+  }
+  await expect(pane(page).locator(".video-card strong",{hasText:"duplicable.mp4"})).toBeVisible();
+  await expect(pane(page).locator(".video-card strong",{hasText:"duplicable-1.mp4"})).toBeVisible();
+});
+test("17 importación sin seleccionar archivo no contacta proveedor",async ({page})=>{
+  await page.goto("/");
+  await pane(page).getByRole("button",{name:"Importar video sin generar otro"}).click();
+  await expect(pane(page).locator("#bst-import-status")).toContainText("Selecciona primero");
+});
