@@ -22,6 +22,9 @@ on:
       - "assets/bstudio-runtime.js"
       - "bridge-browser-tests/**"
       - "playwright.bridge.config.cjs"
+      - "playwright.elite.config.cjs"
+      - "elite-browser-tests/**"
+      - "tests/bstudio_gateway_fixture.py"
       - "browser-tests/**"
       - "playwright.config.cjs"
       - "package.json"
@@ -43,7 +46,7 @@ jobs:
         with:
           python-version: "3.11"
       - name: Syntax validation
-        run: python -m py_compile tools/bstudio_poyo_recover.py tools/poyo_panel_local.py tools/bstudio_reel_assemble.py tools/bstudio_mac_preflight.py tests/test_bstudio_poyo_recover.py tests/test_bstudio_reel_assemble.py tests/test_bstudio_mac_preflight.py tools/bstudio_unified_bridge.py tests/test_bstudio_unified_bridge.py tools/bstudio_elite_gateway.py tests/test_bstudio_elite_gateway.py tools/bstudio_elite_start.py tests/test_bstudio_elite_start.py
+        run: python -m py_compile tools/bstudio_poyo_recover.py tools/poyo_panel_local.py tools/bstudio_reel_assemble.py tools/bstudio_mac_preflight.py tests/test_bstudio_poyo_recover.py tests/test_bstudio_reel_assemble.py tests/test_bstudio_mac_preflight.py tools/bstudio_unified_bridge.py tests/test_bstudio_unified_bridge.py tools/bstudio_elite_gateway.py tests/test_bstudio_elite_gateway.py tools/bstudio_elite_start.py tests/test_bstudio_elite_start.py tests/bstudio_gateway_fixture.py
       - name: Validate unified browser module JavaScript syntax
         run: node --check assets/bstudio-runtime.js
       - name: Offline test suite (no API key, no paid calls)
@@ -68,6 +71,8 @@ jobs:
         run: npm run test:ui
       - name: Run integrated app browser controls
         run: npm run test:bridge
+      - name: Test same active /studio URL in Chromium and Safari WebKit
+        run: npm run test:elite
       - name: Upload failing browser traces
         if: failure()
         uses: actions/upload-artifact@v4
