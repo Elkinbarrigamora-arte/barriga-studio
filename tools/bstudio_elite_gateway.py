@@ -37,6 +37,23 @@ BLOCKED_HEADERS = {
 }
 
 
+class BoundedBody:
+    """Pass exactly Content-Length bytes to the upstream without blocking for EOF."""
+
+    def __init__(self, source, size):
+        self.source = source
+        self.remaining = size
+
+    def read(self, amount=128 * 1024):
+        if self.remaining <= 0:
+            return b""
+        chunk = self.source.read(min(self.remaining, max(1, amount)))
+        if not chunk:
+            raise OSError("El cliente interrumpió la carga antes de completarse.")
+        self.remaining -= len(chunk)
+        return chunk
+
+
 def eligible_overlay(path, status, headers):
     """Never insert the overlay on APIs, text, JSON, or error pages."""
     if status != 200 or urlsplit(path).path not in ("/studio", "/studio/"):
@@ -113,6 +130,7 @@ def make_gateway_handler(media_dir, runtime_path, token, listen_port,
         def proxy_existing_application(self):
             if not self.checked_host() or not self.checked_fetch_site():
                 return self.send_json(403, {"error": "Acceso local no autorizado."})
+            response_started = False
             try:
                 conn = http.client.HTTPConnection(HOST, upstream_port, timeout=180)
                 headers = {}
@@ -135,7 +153,7 @@ def make_gateway_handler(media_dir, runtime_path, token, listen_port,
                     return self.send_json(413, {"error": "Solicitud demasiado grande."})
                 # Feed the inbound request body in bounded chunks through
                 # http.client. Never buffer video uploads in RAM.
-                body = self.rfile if length > 0 else None
+                body = BoundedBody(self.rfile, length) if length > 0 else None
                 conn.request(self.command, self.path, body=body, headers=headers)
                 upstream = conn.getresponse()
                 response_headers = dict(upstream.getheaders())
@@ -151,6 +169,7 @@ def make_gateway_handler(media_dir, runtime_path, token, listen_port,
                 else:
                     data = None
                 self.send_response(status)
+                response_started = True
                 for name, value in upstream.getheaders():
                     low = name.lower()
                     if low in BLOCKED_HEADERS or low in ("content-length", "content-encoding"):
@@ -182,7 +201,7 @@ def make_gateway_handler(media_dir, runtime_path, token, listen_port,
             except (OSError, ValueError, UnicodeError,
                     http.client.HTTPException) as exc:
                 # Never turn network failure into a successful-looking output.
-                if not self.wfile.closed:
+                if not response_started:
                     try:
                         self.send_json(502, {
                             "error": "La aplicación original no respondió. "
