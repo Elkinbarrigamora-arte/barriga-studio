@@ -96,7 +96,7 @@ def engine_inventory(model, voices_dir):
     ]
 
 
-def make_handler(studio, media_dir, runtime_asset, token, port, model, voices_dir):
+def make_handler(studio, media_dir, runtime_asset, token, port, model, voices_dir, initial_task_id=""):
     origin = "http://127.0.0.1:" + str(port)
 
     class Handler(BaseHTTPRequestHandler):
@@ -146,7 +146,7 @@ def make_handler(studio, media_dir, runtime_asset, token, port, model, voices_di
             if route in ("/", "/index.html"):
                 try:
                     html = (studio / "index.html").read_text(encoding="utf-8")
-                    config = json.dumps({"token": token}, ensure_ascii=False)
+                    config = json.dumps({"token": token, "taskId": initial_task_id}, ensure_ascii=False)
                     injected = ('<script>window.__BSTUDIO_BRIDGE__=' + config +
                                 ';</script><script defer src="/assets/bstudio-runtime.js"></script>')
                     html = html.replace("</body>", injected + "</body>") if \
@@ -306,8 +306,11 @@ def main():
     parser.add_argument("--voices-dir", type=Path)
     parser.add_argument("--port", type=int, default=8766)
     parser.add_argument("--model", default=MODEL)
+    parser.add_argument("--task-id", default="", help="Tarea PoYo existente para mostrar en el estudio")
     parser.add_argument("--no-browser", action="store_true")
     args = parser.parse_args()
+    if args.task_id and not TASK_RE.fullmatch(args.task_id):
+        parser.error("ID de PoYo inválido.")
     if not 1024 <= args.port <= 65535:
         parser.error("Puerto inválido.")
     studio = args.studio.expanduser().resolve()
@@ -323,7 +326,7 @@ def main():
     try:
         with ThreadingHTTPServer(
             (HOST, args.port),
-            make_handler(studio, media_dir, runtime, token, args.port, args.model, voices_dir)
+            make_handler(studio, media_dir, runtime, token, args.port, args.model, voices_dir, args.task_id)
         ) as server:
             url = f"http://127.0.0.1:{args.port}/"
             print("B STUDIO · puente unificado local: " + url, flush=True)
