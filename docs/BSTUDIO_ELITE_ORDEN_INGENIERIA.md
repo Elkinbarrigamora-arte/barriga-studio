@@ -106,4 +106,6 @@ La clave de PoYo no se vuelve a pegar; la CLI la recupera del llavero. El comand
 
 La recuperación exige FFprobe. Comprueba el contenedor, la duración y la pista de video antes de dar al archivo su nombre final. Si ese nombre ya existe, comprueba el archivo sin sobrescribirlo. Las redirecciones solo pueden ir a los dominios multimedia permitidos. La presencia de audio se informa por separado y no certifica que contenga narración.
 
+El resultado incluye el SHA-256 del archivo. Si PoYo devuelve un identificador distinto del solicitado, se rechaza la respuesta. Un archivo preexistente puede ser un MP4 válido, pero su nombre no demuestra que venga de la tarea; se conserva sin atribuirlo al proveedor.
+
 **No ejecutar repetidamente el bloque completo:** el comando `git worktree add` crea una carpeta nueva y puede fallar si ya existe. Después usar únicamente el último comando de recuperación.

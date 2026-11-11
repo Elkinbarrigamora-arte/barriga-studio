@@ -5,6 +5,7 @@ READ-ONLY with respect to PoYo tasks: never submits or generates a new task.
 Uses JSON CLI output instead of the truncated human-readable table.
 """
 import argparse
+import hashlib
 import json
 import math
 import os
@@ -113,7 +114,11 @@ def read_existing_task(task_id, runner=subprocess.run):
             "No se pudo consultar la tarea existente (salida CLI " +
             str(result.returncode) + "). No se generó ningún video nuevo."
         )
-    return parse_task(result.stdout)
+    data = parse_task(result.stdout)
+    reported_id = data.get("task_id")
+    if reported_id is not None and reported_id != task_id:
+        raise RuntimeError("La respuesta de PoYo identifica otra tarea. No se descargó ningún archivo.")
+    return data
 
 
 class MediaRedirectHandler(HTTPRedirectHandler):
@@ -194,7 +199,12 @@ def probe_video(path):
     duration = float(info.get("duration", 0))
     if not math.isfinite(duration) or duration <= 0:
         raise RuntimeError("El archivo no tiene una duración de video válida.")
+    digest = hashlib.sha256()
+    with path.open("rb") as media:
+        for chunk in iter(lambda: media.read(128 * 1024), b""):
+            digest.update(chunk)
     return {
+        "sha256": digest.hexdigest(),
         "duracion_segundos": duration,
         "tiene_audio": any(s.get("codec_type") == "audio" for s in streams),
         "video": videos,
@@ -222,10 +232,15 @@ def main():
         destination = args.output_dir.expanduser() / ("poyo-" + args.task_id + ".mp4")
         if destination.exists() or destination.is_symlink():
             details = probe_video(destination)
+            details["vinculo_tarea"] = "archivo_preexistente_no_confirmado"
             print("Archivo ya existe; no se sobrescribe:", destination)
             print("Validación:", json.dumps(details, ensure_ascii=False))
             return 0
         size, details = save_video(url, destination)
+        details["vinculo_tarea"] = (
+            "id_confirmado_por_proveedor" if data.get("task_id") == args.task_id
+            else "consulta_por_id_sin_confirmacion_en_respuesta"
+        )
         print("Video descargado:", destination)
         print("Tamaño:", size, "bytes")
         print("Validación:", json.dumps(details, ensure_ascii=False))

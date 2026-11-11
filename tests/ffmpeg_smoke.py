@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """End-to-end local FFmpeg smoke test using synthetic video+audio. No provider cost."""
+import hashlib
 import io
 import json
 import subprocess
@@ -23,7 +24,8 @@ def check_recovery(source, root):
     raw = source.read_bytes()
     final = root / "recovered.mp4"
     size, metadata = save_video(url, final, opener=lambda *a, **kw: Response(raw))
-    if size != len(raw) or final.read_bytes() != raw or not metadata["tiene_audio"]:
+    if (size != len(raw) or final.read_bytes() != raw or not metadata["tiene_audio"]
+            or metadata["sha256"] != hashlib.sha256(raw).hexdigest()):
         raise RuntimeError("Recovery did not preserve the verified audiovisual file.")
     invalid = root / "invalid.mp4"
     try:

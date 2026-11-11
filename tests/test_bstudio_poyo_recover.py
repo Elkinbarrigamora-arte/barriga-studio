@@ -148,6 +148,16 @@ class RecoveryTests(unittest.TestCase):
         self.assertIn("401/403", str(ctx.exception))
         self.assertNotIn("secret-personal-token", str(ctx.exception))
 
+    def test_provider_response_for_another_task_is_rejected(self):
+        def mismatched(command, **kwargs):
+            return mock.Mock(returncode=0, stdout=json.dumps({
+                "data": {"task_id": "other-task-id", "status": "succeeded",
+                         "files": ["https://cdn.doculator.org/other.mp4"]}
+            }))
+        with mock.patch.object(module.shutil, "which", return_value="/usr/bin/npx"):
+            with self.assertRaisesRegex(RuntimeError, "identifica otra tarea"):
+                module.read_existing_task("0AHQMX2G2T4ZZE6O", runner=mismatched)
+
     def test_invalid_task_id(self):
         with self.assertRaises(ValueError):
             module.read_existing_task("../bad")

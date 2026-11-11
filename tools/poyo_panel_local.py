@@ -120,12 +120,18 @@ class Handler(BaseHTTPRequestHandler):
                 validate_download_url(url)
                 dest = Path.home() / "Movies" / "BarrigaStudio" / ("poyo-" + task_id + ".mp4")
                 if dest.exists() or dest.is_symlink():
+                    details = probe_video(dest)
+                    details["vinculo_tarea"] = "archivo_preexistente_no_confirmado"
                     return self.send(200, {
                         "estado": "archivo_ya_existente", "ruta": str(dest),
-                        "validacion": probe_video(dest),
+                        "validacion": details,
                         "nota": "No se sobreescribió.",
                     })
                 size, details = save_video(url, dest)
+                details["vinculo_tarea"] = (
+                    "id_confirmado_por_proveedor" if result.get("task_id") == task_id
+                    else "consulta_por_id_sin_confirmacion_en_respuesta"
+                )
                 return self.send(200, {
                     "estado": "mp4_descargado", "ruta": str(dest),
                     "bytes": size, "validacion": details,
