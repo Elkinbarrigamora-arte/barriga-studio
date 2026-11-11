@@ -24,8 +24,8 @@ permissions:
 
 jobs:
   recovery-tests:
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -37,10 +37,17 @@ jobs:
         run: python -m py_compile tools/bstudio_poyo_recover.py tools/poyo_panel_local.py tools/bstudio_reel_assemble.py tools/bstudio_mac_preflight.py tests/test_bstudio_poyo_recover.py tests/test_bstudio_reel_assemble.py tests/test_bstudio_mac_preflight.py
       - name: Offline test suite (no API key, no paid calls)
         run: python -m unittest discover -s tests -p 'test_bstudio_*.py' -v
-      - name: Install FFmpeg and FFprobe for audiovisual smoke test
+      - name: Verify or install FFmpeg and FFprobe for the audiovisual smoke test
+        timeout-minutes: 3
         run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y ffmpeg
+          if ! command -v ffmpeg >/dev/null || ! command -v ffprobe >/dev/null; then
+            sudo apt-get -o Acquire::Retries=1 -o Acquire::http::Timeout=15 \
+              -o Acquire::https::Timeout=15 update --error-on=any -qq
+            sudo apt-get -o Acquire::Retries=1 -o Acquire::http::Timeout=15 \
+              -o Acquire::https::Timeout=15 install -y --no-install-recommends ffmpeg
+          fi
+          ffmpeg -version
+          ffprobe -version
       - name: Real FFmpeg audiovisual smoke test (synthetic media)
         run: python tests/ffmpeg_smoke.py
   browser-tests:
