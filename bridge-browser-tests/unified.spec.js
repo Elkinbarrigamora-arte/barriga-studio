@@ -130,3 +130,26 @@ test("17 importación sin seleccionar archivo no contacta proveedor",async ({pag
   await pane(page).getByRole("button",{name:"Importar video sin generar otro"}).click();
   await expect(pane(page).locator("#bst-import-status")).toContainText("Selecciona primero");
 });
+
+
+test("18 la biblioteca informa si falta configurar carpeta de voces",async ({page})=>{
+  await page.goto("/");
+  await expect(pane(page).locator("#bst-voices-status")).toContainText("aún no está configurada");
+});
+test("19 voces existentes se muestran con reproductor de audio",async ({page})=>{
+  await page.route("**/api/voices",async route=>route.fulfill({
+    status:200,contentType:"application/json",
+    body:JSON.stringify({configured:true,voices:[{filename:"voz-original.wav",bytes:500,modified:1}]})
+  }));
+  await page.goto("/");
+  await expect(pane(page).locator("audio")).toHaveCount(1);
+  await expect(pane(page).getByRole("link",{name:"Descargar audio existente"})).toBeVisible();
+  const audio=await pane(page).locator("audio").getAttribute("src");
+  expect(audio).toContain("/voices/voz-original.wav?token=");
+});
+test("20 botón actualizar voces consulta al mismo servidor local",async ({page})=>{
+  await page.goto("/");
+  const response=page.waitForResponse(r=>r.url().endsWith("/api/voices"));
+  await pane(page).getByRole("button",{name:"Actualizar voces"}).click();
+  expect((await response).status()).toBe(200);
+});
