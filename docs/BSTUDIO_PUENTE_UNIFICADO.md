@@ -7,9 +7,10 @@ Este puente está implementado en una rama protegida. **Aún no está publicado 
 ### Comportamiento verificable
 
 - El mismo servidor local incluye el editor, Barriga IA, la galería MP4 y el registro de motores.
-- Guiones: consulta el inventario Ollama real (modelo qwen2.5-coder:14b). El botón permanece deshabilitado si no está disponible. El contenido se genera únicamente cuando lo solicita el usuario y no sustituye texto previo sin confirmación.
-- Galería: reproduce y descarga MP4/MOV que existan realmente en la carpeta ~/Movies/BarrigaStudio; ofrece HTTP Range para la reproducción en Safari.
+- Guiones: consulta el inventario Ollama real y, con `--model auto` (predeterminado), selecciona únicamente un modelo de texto ya instalado, priorizando `qwen2.5-coder:14b`. No descarga modelos automáticamente. El botón permanece deshabilitado si no está disponible. El contenido se genera únicamente cuando lo solicita el usuario y no sustituye texto previo sin confirmación.
+- Galería: reproduce y descarga MP4/MOV que existan realmente en la carpeta `~/Movies/BarrigaStudio`; ofrece HTTP Range para la reproducción en Safari. El botón **Importar MP4 existente** copia localmente el archivo seleccionado (máximo 250 MB) sin sobrescribir ni borrar el original. La aceptación básica de un MP4 no equivale a validar códecs o movimiento real; para eso se utiliza FFprobe.
 - PoYo: recupera solamente un task_id preexistente usando las credenciales de la CLI local. No genera otro video ni gasta créditos; HTTP 401/403 se presenta como error y no como éxito.
+- Voces: con `--voices-dir` apuntando a la carpeta real del banco ya existente, muestra y reproduce archivos WAV/MP3/M4A/AAC desde Safari, sin copiarlos ni volver a generarlos. Si no se indica la carpeta, muestra el bloqueo explícito.
 - Motores: Barriga IA (Ollama), PoYo (recuperación de video existente), voces (carpeta de audios), fal.ai (pendiente de conexión), Draw Things/Kling (pendiente de validación). El catálogo no declara que todo esté operativo.
 - Seguridad: limitado a 127.0.0.1, token de sesión, no lectura arbitraria de archivos, no enlaces simbólicos, sin claves en el repositorio.
 
@@ -23,17 +24,20 @@ if [ ! -e "$BRIDGE_DIR" ]; then
   git clone --depth 1 --single-branch \
     --branch feat/bstudio-elite-recovery-qa-20261110 \
     https://github.com/Elkinbarrigamora-arte/barriga-studio.git "$BRIDGE_DIR" || exit 1
+else
+  git -C "$BRIDGE_DIR" pull --ff-only || exit 1
 fi
 python3 "$BRIDGE_DIR/tools/bstudio_unified_bridge.py" \
   --studio "$HOME/barriga-studio" \
   --media-dir "$HOME/Movies/BarrigaStudio" \
+  --model auto \
   --task-id 0AHQMX2G2T4ZZE6O \
   --port 8781
 ```
 
 Abre http://127.0.0.1:8781/ en Safari si no abre automáticamente. Puerto 8781 no interfiere con el servidor anterior en 8766. Ctrl+C detiene solamente este puente.
 
-Si la carpeta ~/barriga-studio no es el código más reciente, señala la carpeta correcta con --studio. Una web privada remota puede tener código diferente del repositorio local.
+Si `~/barriga-studio` no es el código más reciente, señala con `--studio` la carpeta correcta antes de ejecutar. Para escuchar las voces existentes, agrega el argumento `--voices-dir "RUTA_REAL_DEL_BANCO_DE_VOCES"` (no inventar una ubicación). Una web privada remota puede tener código diferente del repositorio local.
 
 ### Antes de publicar
 
