@@ -52,6 +52,11 @@ function mount(){
  </div>
  <div><h3>⚙️ Motores y voces</h3>
  <div id="bst-engines" class="engines" aria-live="polite">Comprobando los servicios conectados...</div></div>
+ <div class="wide"><h3>🎙️ Biblioteca de voces existentes</h3>
+ <p>Escucha y reutiliza tus archivos de audio originales, sin generar voces nuevas.</p>
+ <div class="actions"><button id="bst-refresh-voices" class="secondary">Actualizar voces</button></div>
+ <div class="status" id="bst-voices-status" role="status">Comprobando el banco de voces...</div>
+ <div class="videos" id="bst-voices"></div></div>
  <div class="wide"><h3>🎞️ Videos generados · Galería MP4</h3>
  <p>Se muestran únicamente videos reales descargados a la carpeta de producciones de la Mac.</p>
  <div class="actions"><button id="bst-refresh" class="secondary">Actualizar galería</button></div>
@@ -124,6 +129,31 @@ function mount(){
    }
   }catch(err){status.textContent="Error de galería: "+err.message;}
  }
+ async function updateVoices(){
+   const status=el("bst-voices-status"),library=el("bst-voices");
+   status.textContent="Consultando archivos de voz existentes...";
+   try{
+     const data=await api("/api/voices");
+     library.replaceChildren();
+     if(!data.configured){
+       status.textContent="La carpeta de voces aún no está configurada. Inicia el puente con --voices-dir RUTA.";
+       return;
+     }
+     status.textContent=data.voices.length?
+       data.voices.length+" archivo(s) de audio encontrados.":
+       "No hay archivos compatibles en esa carpeta. No se crearon voces nuevas.";
+     for(const voice of data.voices){
+       const src="/voices/"+encodeURIComponent(voice.filename)+"?token="+encodeURIComponent(token);
+       const card=document.createElement("div");card.className="video-card";
+       const label=document.createElement("strong");label.textContent=voice.filename;
+       const audio=document.createElement("audio");audio.controls=true;
+       audio.preload="metadata";audio.src=src;audio.style.width="100%";
+       const link=document.createElement("a");link.href=src;
+       link.download=voice.filename;link.textContent="Descargar audio existente";
+       card.append(label,audio,link);library.append(card);
+     }
+   }catch(err){status.textContent="No se pudo consultar las voces: "+err.message;}
+ }
  script.addEventListener("click",async()=>{
   const idea=el("bst-idea").value.trim();
   if(idea.length<2){scriptStatus.textContent="Primero escribe una idea.";return;}
@@ -182,7 +212,8 @@ function mount(){
  });
  el("bst-check").addEventListener("click",updateEngines);
  el("bst-refresh").addEventListener("click",updateVideos);
- updateEngines();updateVideos();
+ el("bst-refresh-voices").addEventListener("click",updateVoices);
+ updateEngines();updateVideos();updateVoices();
 }
 if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",mount);
 else mount();
