@@ -82,6 +82,15 @@ motores y voces auténticos en la Mac.
 
 No activar APIs pagadas ni publicar una rama candidata como versión final sin cumplir los puntos críticos.
 
+### Reversión en la Mac y registro de aceptación
+
+1. **Antes de detener el Studio:** confirma que no haya trabajos en curso. Registra de forma privada la versión del checkout del gateway, la carpeta, el intérprete y el comando con los que se inició el servidor original, sin volcar variables de entorno ni credenciales. Respalda los cambios locales, proyectos, estado persistente y recursos que usa esa instalación. Conserva aparte cualquier exportación de proyectos del navegador: no contiene por sí sola los archivos de la Mac.
+2. **Comprueba que el respaldo se pueda restaurar** en un destino aislado antes de cambiar el proceso activo. No borres datos del perfil habitual ni importes un respaldo de prueba a las colas o proyectos originales.
+3. **Valida la misma URL oficial tras iniciar el gateway:** abre proyectos previos y verifica su estado tras cerrar y reabrir Safari; prueba un guion con un modelo Ollama instalado; reproduce una voz existente; recupera el ID PoYo ya creado y comprueba que el archivo se abre y se descarga. Registra el tamaño, la duración y el SHA-256 del MP4 sin publicar enlaces firmados. Marca como pendientes los controles sin una prueba real y comprueba que estén deshabilitados. Para el reel final, escucha la voz en español, revisa su sincronización y comprueba que el MP4 descargado conserva los 35 segundos y ambas pistas.
+4. **Si la verificación falla:** comprueba primero que ningún trabajo nuevo dependa del gateway. Si está inactivo, detén solo la sesión del lanzador que acabas de iniciar y vuelve a ejecutar el comando original en su carpeta. Verifica que `http://127.0.0.1:8766/studio` vuelve a mostrar la aplicación y los proyectos previos en el perfil habitual. No sustituyas el `index.html` ni limpies el almacenamiento. No restaures datos en el perfil habitual a ciegas: si hubo cambios de datos, compara primero el estado actual con la copia para no perder trabajos posteriores.
+
+Registra la comprobación de cada paso junto al commit probado. Los resultados del servidor simulado y de CI no cuentan como verificación de la Mac.
+
 ### Pruebas automáticas
 
 - Python: python3 -m unittest discover -s tests -p 'test_bstudio_*.py' -v
