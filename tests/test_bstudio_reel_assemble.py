@@ -61,31 +61,41 @@ class ReelAssemblyTests(unittest.TestCase):
         self.assertNotIn("submit", command)
         self.assertNotIn("http", text)
 
-    def test_rejects_silent_voice(self):
+    def test_rejects_missing_audio_track(self):
         with mock.patch.object(module, "probe", side_effect=[
-            (5.0, [{"codec_type": "video"}]),
+            (5.0, [{"codec_type": "video", "duration": "5"}]),
             (35.0, [{"codec_type": "video"}])
         ]):
             with self.assertRaises(ValueError):
                 module.validate_sources(35, [(Path("/tmp/a.mp4"), 5)], Path("/tmp/voice.wav"))
 
     def test_rejects_undersized_video_scene(self):
-        with mock.patch.object(module, "probe", return_value=(3.0, [{"codec_type": "video"}])):
-            with self.assertRaises(ValueError):
+        with mock.patch.object(module, "probe", return_value=(
+            5.0, [{"codec_type": "video", "duration": "3"}, {"codec_type": "audio", "duration": "5"}]
+        )):
+            with self.assertRaisesRegex(ValueError, "demasiado corta"):
                 module.validate_sources(35, [(Path("/tmp/a.mp4"), 5)], Path("/tmp/voice.wav"))
 
     def test_validate_final_video_audio_and_duration(self):
         with mock.patch.object(module, "probe", return_value=(
-            35.1, [{"codec_type": "video", "width": 480, "height": 854},
-                   {"codec_type": "audio"}]
+            35.1, [{"codec_type": "video", "width": 480, "height": 854, "duration": "35.1"},
+                   {"codec_type": "audio", "duration": "35.0"}]
         )):
             self.assertAlmostEqual(module.validate_output(Path("/tmp/out.mp4"), 35), 35.1)
 
     def test_validate_final_rejects_missing_audio(self):
         with mock.patch.object(module, "probe", return_value=(
-            35.0, [{"codec_type": "video", "width": 480, "height": 854}]
+            35.0, [{"codec_type": "video", "width": 480, "height": 854, "duration": "35.0"}]
         )):
-            with self.assertRaises(RuntimeError):
+            with self.assertRaisesRegex(RuntimeError, "Falta la pista de audio"):
+                module.validate_output(Path("/tmp/out.mp4"), 35)
+
+    def test_validate_final_rejects_audio_ending_early(self):
+        with mock.patch.object(module, "probe", return_value=(
+            35.0, [{"codec_type": "video", "width": 480, "height": 854, "duration": "35.0"},
+                   {"codec_type": "audio", "duration": "20.0"}]
+        )):
+            with self.assertRaisesRegex(RuntimeError, "ambas pistas"):
                 module.validate_output(Path("/tmp/out.mp4"), 35)
 
 
