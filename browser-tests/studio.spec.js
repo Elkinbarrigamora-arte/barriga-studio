@@ -1,4 +1,7 @@
-const { test, expect } = require('@playwright/test');
+const { test, expect, chromium } = require('@playwright/test');
+const fs = require('node:fs/promises');
+const os = require('node:os');
+const path = require('node:path');
 
 const KEY = 'barriga-studio-projects-v1';
 const FORMAT = 'barriga-studio-respaldo';
@@ -185,6 +188,30 @@ test.describe('Persistencia y edición de proyectos', () => {
     await page.reload();
     await expect(page.locator('#projectList .project')).toHaveCount(1);
   });
+  test('reabre el proyecto después de cerrar por completo el navegador', async ({baseURL}) => {
+    test.setTimeout(45000);
+    const profile = await fs.mkdtemp(path.join(os.tmpdir(), 'bstudio-profile-'));
+    let context;
+    try {
+      context = await chromium.launchPersistentContext(profile, {baseURL});
+      let page = context.pages()[0] || await context.newPage();
+      await page.goto('/');
+      await add(page,{name:'Proyecto persistente',script:'Guion que debe sobrevivir al cierre'});
+      const original = (await saved(page))[0];
+      expect(original).toBeDefined();
+      await context.close();
+      context = await chromium.launchPersistentContext(profile, {baseURL});
+      page = context.pages()[0] || await context.newPage();
+      await page.goto('/');
+      await expect(page.locator('#projectList .project')).toHaveCount(1);
+      expect(await saved(page)).toEqual([original]);
+      await page.getByRole('button',{name:'Abrir'}).click();
+      await expect(page.locator('#script')).toHaveValue(original.script);
+    } finally {
+      try { await context?.close(); }
+      finally { await fs.rm(profile, {recursive:true, force:true}); }
+    }
+  });
   test('edición de proyecto abierto conserva mismo ID', async ({page}) => {
     await add(page);
     const id=(await saved(page))[0].id;
@@ -284,6 +311,34 @@ test.describe('Respaldo exportación e importación sin pérdida', () => {
     await page.getByRole('button',{name:'Descargar respaldo JSON'}).click();
     await pending;
     expect(await saved(page)).toHaveLength(1);
+  });
+  test('restaura el archivo realmente descargado en un perfil vacío', async ({page,browser,baseURL}) => {
+    const name = 'Proyecto portable ' + '🎬'.repeat(160);
+    const script = 'Narración conservada\n' + 'Escena de prueba. '.repeat(2000) + '\nÚltima escena.';
+    await add(page,{name,script,voice:'Español femenino'});
+    const original = (await saved(page))[0];
+    expect(original).toMatchObject({name,script});
+    const [download] = await Promise.all([
+      page.waitForEvent('download'),
+      page.getByRole('button',{name:'Descargar respaldo JSON'}).click()
+    ]);
+    const file = await download.path();
+    const isolated = await browser.newContext({baseURL});
+    try {
+      const restored = await isolated.newPage();
+      await restored.goto('/');
+      expect(await saved(restored)).toEqual([]);
+      await restored.locator('#respaldo-herramientas input[type="file"]').setInputFiles({
+        name:download.suggestedFilename(),mimeType:'application/json',buffer:await fs.readFile(file)
+      });
+      await expect(restored.locator('#respaldo-status')).toContainText('1 añadidos');
+      expect(await saved(restored)).toEqual([original]);
+      await restored.getByRole('button',{name:'Abrir'}).click();
+      await expect(restored.locator('#script')).toHaveValue(script);
+      await expect(restored.locator('#voice')).toHaveValue('Español femenino');
+    } finally {
+      await isolated.close();
+    }
   });
   test('descarga informa cantidad de proyectos', async ({page}) => {
     await add(page);

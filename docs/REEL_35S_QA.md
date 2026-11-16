@@ -33,7 +33,11 @@ python3 tools/bstudio_reel_assemble.py manifest.json --dry-run
 python3 tools/bstudio_reel_assemble.py manifest.json
 ```
 
-Salida predeterminada: `~/Movies/BarrigaStudio/reel-35s.mp4`. El sistema impide sobreescribir ese archivo por accidente. La exportación usa H.264/AAC MP4, 480×854, 30 fps, con audio obligatorio. FFprobe comprueba la duración, dimensiones y pistas después de exportar. Un error no publica un MP4 como final.
+Salida predeterminada: `~/Movies/BarrigaStudio/reel-35s.mp4`. El sistema impide sobreescribir ese archivo, incluso si dos exportaciones coinciden. La exportación usa H.264/AAC MP4, 480×854, 30 fps, con audio obligatorio. FFprobe comprueba las dimensiones y mide por separado el contenedor, la pista de video y la pista de audio. Si una pista termina antes de la tolerancia permitida, no se publica el archivo final. La verificación técnica de la pista no confirma que la voz sea inteligible ni que esté sincronizada con la imagen.
+
+El montaje también mide el pico de audio de la narración y de la exportación con [FFmpeg `volumedetect`](https://www.ffmpeg.org/ffmpeg-filters.html#volumedetect). Rechaza pistas por debajo de −60 dBFS de pico. Este umbral detecta silencio o señal extremadamente débil; no sustituye escuchar la voz en español, revisar su nivel y comprobar la sincronización.
+
+Prueba reproducible sin proveedor: `python3 tests/ffmpeg_smoke.py` ensambla 35 segundos con tres clips sintéticos (12, 12 y 11 segundos) y un tono; luego comprueba que una pista silenciosa de 35 segundos no produce una salida final. La prueba valida la línea de tiempo y el archivo, sin certificar narración, continuidad visual ni generación neuronal.
 
 ## Estado actual
 
