@@ -1,0 +1,85 @@
+name: B STUDIO PoYo Recovery QA
+on:
+  push:
+    branches:
+      - feat/bstudio-elite-recovery-qa-20261110
+  pull_request:
+    paths:
+      - "tools/bstudio_poyo_recover.py"
+      - "tests/test_bstudio_poyo_recover.py"
+      - "tools/poyo_panel_local.py"
+      - "tools/bstudio_reel_assemble.py"
+      - "tests/test_bstudio_reel_assemble.py"
+      - "tests/ffmpeg_smoke.py"
+      - "tests/test_bstudio_mac_preflight.py"
+      - "tools/bstudio_mac_preflight.py"
+      - "tools/bstudio_unified_bridge.py"
+      - "tools/bstudio_elite_gateway.py"
+      - "tools/bstudio_elite_start.py"
+      - "tests/test_bstudio_elite_start.py"
+      - "tests/test_bstudio_elite_gateway.py"
+      - "tests/test_bstudio_unified_bridge.py"
+      - "assets/bstudio-runtime.js"
+      - "bridge-browser-tests/**"
+      - "playwright.bridge.config.cjs"
+      - "playwright.elite.config.cjs"
+      - "elite-browser-tests/**"
+      - "tests/bstudio_gateway_fixture.py"
+      - "browser-tests/**"
+      - "playwright.config.cjs"
+      - "package.json"
+      - ".github/workflows/poyo-recovery-test.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  recovery-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      - name: Install Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Syntax validation
+        run: python -m py_compile tools/bstudio_poyo_recover.py tools/poyo_panel_local.py tools/bstudio_reel_assemble.py tools/bstudio_mac_preflight.py tests/test_bstudio_poyo_recover.py tests/test_bstudio_reel_assemble.py tests/test_bstudio_mac_preflight.py tools/bstudio_unified_bridge.py tests/test_bstudio_unified_bridge.py tools/bstudio_elite_gateway.py tests/test_bstudio_elite_gateway.py tools/bstudio_elite_start.py tests/test_bstudio_elite_start.py tests/bstudio_gateway_fixture.py
+      - name: Validate unified browser module JavaScript syntax
+        run: node --check assets/bstudio-runtime.js
+      - name: Offline test suite (no API key, no paid calls)
+        run: python -m unittest discover -s tests -p 'test_bstudio_*.py' -v
+      - name: Install FFmpeg and FFprobe for audiovisual smoke test
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y ffmpeg
+      - name: Real FFmpeg audiovisual smoke test (synthetic media)
+        run: python tests/ffmpeg_smoke.py
+  browser-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    container:
+      image: mcr.microsoft.com/playwright:v1.56.1-noble
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      - name: Install test dependencies
+        run: npm install --no-audit --no-fund
+      - name: Run real Chromium UI tests
+        run: npm run test:ui
+      - name: Run integrated app browser controls
+        run: npm run test:bridge
+      - name: Test same active /studio URL in Chromium and Safari WebKit
+        run: npm run test:elite
+      - name: Upload failing browser traces
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: browser-regression-evidence
+          path: |
+            test-results/
+            playwright-report/
+          if-no-files-found: ignore
+
