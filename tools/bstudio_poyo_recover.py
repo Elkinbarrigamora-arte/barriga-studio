@@ -80,7 +80,7 @@ def validate_download_url(url):
     if host in ("localhost",) or host.endswith(".localhost"):
         raise ValueError("No se permiten enlaces locales.")
     # Provider media hosts: extend after validating an actual provider response.
-    allowed = ("cdn.doculator.org", "storage.poyo.ai", "cdn.poyo.ai")
+    allowed = ("storage.poyo.ai",)
     if host not in allowed:
         raise ValueError(
             "Host multimedia no reconocido: " + host +
