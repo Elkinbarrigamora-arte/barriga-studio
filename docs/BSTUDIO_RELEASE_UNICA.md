@@ -181,3 +181,42 @@ No se editó, eliminó ni deduplicó ningún proyecto.
 - No hubo generación pagada, consumo de créditos, cambios en main, merge ni despliegue.
 
 **Bloqueo operativo único para la validación local:** registrar y conectar la Mac real del estudio en el conector. Hasta entonces no ejecutar el recuperador PoYo que depende del llavero de macOS, no reconciliar archivos locales, no declarar las voces conectadas y no certificar el reel real. Mantener PR #10 y PR #13 en borrador.
+
+## Revalidación operativa — 17-nov-2026 06:59 UTC
+
+Esta lectura autenticada sustituye snapshots anteriores para los objetos consultados:
+
+### Estado real del estudio
+
+Consulta de Barriga Studio a las **2026-11-17T06:59:22.535Z**:
+
+- El estudio respondió autenticadamente.
+- El único dispositivo registrado continúa siendo **Mi computador Windows**, emparejado pero desconectado (paired=true, connected=false, lastSeenAt=null). La Mac no aparece registrada.
+- Core continúa sin configurar: configured=false, selected=false, enabled=false, gatewayConnected=false, inferenceVerified=false, sin modelo.
+- La narración local gratuita figura disponible, pero no acredita conexión del banco de voces existente del propietario.
+- ownVideoConfigured=false, privateVideoReady=false, privateSpeechReady=false. La exportación reportada es montaje en navegador con escenas, narración y movimiento de cámara; no equivale a generación neuronal de movimiento.
+
+### Reproducción fresca de issue #12
+
+El proyecto más reciente consultado, **077d6bce-53cb-4676-ba1a-b07903e0f8fc**, «Mis últimas gotas para ti», revisión 0b196e44-c7b4-48d1-bb75-82b10b6e2b74, conserva seis escenas de imagen de cinco segundos cada una:
+
+- audioReady=true, localNarration=true, videoPreparation=null.
+- A pesar de ello, el snapshot informa percent=100, complete=true, final=true, etapa «Montaje final completado» y etiqueta «Video listo para descargar».
+- La respuesta del conector no incluye ruta/URL de MP4, ID de artefacto, tamaño, SHA-256 ni resultado FFprobe. Por tanto, el estado de entrega no queda respaldado por evidencia de archivo en este snapshot; no se afirma que no pueda existir un archivo externo no expuesto por el conector.
+
+La copia **d525104e-5f1b-42e3-9328-88c6fb8fef26** se mantiene en estado distinto: seis escenas de imagen, narración local, videoPreparation=null, 80 %, complete=false, final=false. No se modificó, eliminó ni deduplicó ninguna copia.
+
+### Trabajos, PoYo y Site
+
+- El inventario de trabajos consultado devuelve trabajos de imagen y producciones guardadas del estudio; no consulta el proveedor PoYo.
+- El task existente 0AHQMX2G2T4ZZE6O no fue consultado en PoYo ni recuperado. No se llamó a submit, no se descargó ningún archivo y no se consumieron créditos.
+- No hay acción de conector disponible en esta ejecución para el Site appgprj_6ac9279142e881918864b413032701e2; no se ejecutaron GET /api/ai/learning ni POST action=tick.
+
+### GitHub / CI
+
+- PR #10 continúa abierta y en borrador, base main, HEAD 0cf6e7475d8ac627517c76c6cf8504817904f361; la base reportada sigue en a07670c566b6c3cb04f387a553b80fffeacb08a9. No se fusionó ni desplegó.
+- PR #13 continúa abierta y en borrador, base exacta en PR #10 HEAD, HEAD 5e006ef75fa0e350ea2c9ced29957f8e7ee58fd6.
+- GitHub Actions run 44027858751, asociado a ese HEAD, terminó con ambos jobs exitosos: navegador (Chromium/WebKit) y recuperación/FFmpeg. La suite documentada totaliza 238 comprobaciones sintéticas: 102 Python, 71 editor Chromium, 40 puente Chromium/WebKit, 24 ruta /studio Chromium/WebKit y 1 smoke FFmpeg/FFprobe.
+- Estas pruebas usan fixtures y medios sintéticos. No certifican el equipo, las voces reales, el MP4 PoYo ni el motor neuronal. No se suman a la suite de PR #10.
+
+**Decisión:** mantener PR #10 y PR #13 en borrador. No fusionar, desplegar, generar ni gastar créditos. El siguiente paso local sigue siendo registrar y conectar la Mac real, hacer inventario y respaldo sin sobrescribir sus cambios y ejecutar la consulta de solo lectura de la tarea PoYo existente desde el llavero.
