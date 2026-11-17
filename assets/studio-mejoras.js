@@ -29,13 +29,14 @@
   };
   const clean = (project) => {
     if (!project || typeof project !== "object" || Array.isArray(project)) return null;
-    const name = String(project.name || "Proyecto sin título").slice(0, 150).trim();
-    const script = String(project.script || "").slice(0, 30000);
+    // Keep text written by Studio intact. The file-size limit bounds imports.
+    const name = typeof project.name === "string" ? project.name : "Proyecto sin título";
+    const script = typeof project.script === "string" ? project.script : "";
     const style = styles.includes(project.style) ? project.style : styles[0];
     const format = formats.includes(project.format) ? project.format : formats[0];
     const duration = durations.includes(project.duration) ? project.duration : durations[0];
     const voice = voices.includes(project.voice) ? project.voice : voices[0];
-    const date = String(project.date || stamp()).slice(0, 100);
+    const date = typeof project.date === "string" ? project.date : stamp();
     return { id: (typeof project.id === "number" || typeof project.id === "string") ?
       project.id : uniqueId(), name, script, style, format, duration, voice, date };
   };
