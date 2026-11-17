@@ -64,7 +64,7 @@ Una sola aplicación oficial de Barriga Studio, una sola URL de producción y un
 - URL: https://github.com/Elkinbarrigamora-arte/barriga-studio/pull/13
 - Rama: `feat/bstudio-recovery-audio-guard-20261116`; base explícita: HEAD actual de PR #10.
 - HEAD de código probado: `b3dc4084edf80adad6461ee36aa71ed1f67ce05d`.
-- HEAD documental actual observado: `aa4f05887da1505ea02db8677530a4fd9b0e85cc`; ese commit añade el diagnóstico, sin cambiar el código probado.
+- El HEAD puede incluir commits documentales posteriores al código probado; comprobar el SHA del código y el resultado CI por separado. La actualización de esta política no modifica el código de ejecución.
 - Actions run **43992043162**, ambos jobs exitosos: 102 Python + 71 editor Chromium + 40 puente Chromium/WebKit + 24 ruta `/studio` Chromium/WebKit + 1 smoke FFmpeg/FFprobe sintético = **238 comprobaciones**.
 - El smoke adicional rechazó una narración sintética silenciosa, conservó un MP4 sintético válido y rechazó uno truncado.
 - Añade validación de redirecciones/hosts PoYo, coincidencia del task_id, FFprobe obligatorio, SHA-256, publicación atómica sin sobrescritura y duración independiente de las pistas de audio/video.
