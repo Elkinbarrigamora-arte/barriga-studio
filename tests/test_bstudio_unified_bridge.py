@@ -194,10 +194,10 @@ class UnifiedBridgeTests(unittest.TestCase):
         destination = self.media / ("poyo-" + task_id + ".mp4")
         destination.write_bytes(self.movie.read_bytes())
         probe = {"sha256": "b" * 64, "duracion_segundos": 35.0, "tiene_audio": True}
-        with mock.patch.object(bridge, "read_existing_task") as called, \\
-             mock.patch.object(bridge, "probe_video", return_value=probe) as checked:
-            status, _, body = self.send("/api/recover", "POST",
-                                        {"task_id": task_id}, token=self.token)
+        with mock.patch.object(bridge, "read_existing_task") as called:
+            with mock.patch.object(bridge, "probe_video", return_value=probe) as checked:
+                status, _, body = self.send("/api/recover", "POST",
+                                            {"task_id": task_id}, token=self.token)
         self.assertEqual(status, 200)
         payload = json.loads(body)
         self.assertEqual(payload["status"], "already_downloaded")
@@ -211,11 +211,13 @@ class UnifiedBridgeTests(unittest.TestCase):
         destination = self.media / ("poyo-" + task_id + ".mp4")
         original = b"corrupt-local-file"
         destination.write_bytes(original)
-        with mock.patch.object(bridge, "read_existing_task") as called, \\
-             mock.patch.object(bridge, "probe_video",
-                               side_effect=RuntimeError("ffprobe no pudo validar el archivo MP4")):
-            status, _, body = self.send("/api/recover", "POST",
-                                        {"task_id": task_id}, token=self.token)
+        with mock.patch.object(bridge, "read_existing_task") as called:
+            with mock.patch.object(
+                bridge, "probe_video",
+                side_effect=RuntimeError("ffprobe no pudo validar el archivo MP4")
+            ):
+                status, _, body = self.send("/api/recover", "POST",
+                                            {"task_id": task_id}, token=self.token)
         self.assertEqual(status, 502)
         self.assertIn(b"ffprobe no pudo validar", body)
         self.assertEqual(destination.read_bytes(), original)
