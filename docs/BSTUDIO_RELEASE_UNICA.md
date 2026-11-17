@@ -259,3 +259,39 @@ Lectura del proyecto **077d6bce-53cb-4676-ba1a-b07903e0f8fc**, revisión `0b196e
 - No hay una acción de conector disponible para el Site `appgprj_6ac9279142e881918864b413032701e2` ni sus rutas GET `/api/ai/learning` y POST `{"action":"tick"}` en esta ejecución. No se obtuvo estado del Site ni se envió ningún tick.
 
 **Decisión:** mantener PR #10 y PR #13 en borrador; no fusionar ni desplegar. No ejecutar el recuperador PoYo que depende del llavero de macOS ni reconciliar archivos locales hasta tener la Mac registrada y conectada. No generar ni consumir créditos.
+
+## Revalidación y correcciones de recuperación — 17-nov-2026 10:03–10:07 UTC
+
+### Estado del estudio y proyectos
+
+Consulta autenticada de solo lectura del estudio a las **2026-11-17T10:03:22.881Z**:
+
+- El único dispositivo registrado continúa siendo «Mi computador Windows», emparejado pero desconectado; la Mac del propietario no aparece registrada.
+- Core continúa sin configurar, seleccionar o verificar inferencia (configured=false, gatewayConnected=false, inferenceVerified=false).
+- La narración local está disponible como capacidad del dispositivo, pero el banco de voces original del propietario no está conectado/verificado. El video privado tampoco está configurado.
+- La copia más reciente de «Mis últimas gotas para ti» informa 100 %, complete=true, final=true y «Video listo para descargar», aunque sus seis escenas son imágenes, localNarration=true y videoPreparation=null. El snapshot no expone ruta/URL MP4, ID de artefacto, tamaño, SHA-256 ni FFprobe.
+- Otra copia de la misma historia permanece en 80 %, complete=false, con seis imágenes, narración local y videoPreparation=null. Las copias conservan estados distintos; no se modificó ni deduplicó ninguna.
+- Los últimos trabajos guardados por el estudio son de tipo imagen. Este inventario no consulta PoYo y no demuestra que la tarea externa exista o no exista.
+
+### Correcciones de contrato en la candidata PR #13
+
+La revisión estática detectó que tools/bstudio_poyo_recover.py cambió save_video() para devolver (bytes, metadata), pero tools/bstudio_unified_bridge.py seguía tratando el retorno como un entero. Corregido en el commit **8124b66886e0370452b8e1a2bf1677fd4ec570a0**: el endpoint devuelve bytes numéricos y los metadatos FFprobe/SHA-256 producidos antes de la publicación atómica. Test de regresión añadido.
+
+Una segunda revisión detectó que el endpoint respondía already_downloaded ante cualquier ruta local existente sin validar el archivo. Corregido en **1f292c9d16f661d862201b588cdcbd85330e6988**: ahora valida archivos preexistentes con FFprobe, marca el vínculo con la tarea como no confirmado por el nombre y rechaza archivos corruptos sin sobrescribirlos ni volver a consultar/generar en PoYo. Los tests verifican archivo válido, corrupto, preservación y ausencia de reconsulta.
+
+Un intento intermedio (**44061405036**) falló únicamente en py_compile por sintaxis de un test; se corrigió en **b84c2360d79493cbd3985ebb44817b5134187fcd** antes de la ejecución final.
+
+### CI de la rama PR #13
+
+- Run **44060945239**: ambos jobs exitosos; 103 pruebas Python, 71 editor Chromium, 40 puente Chromium/WebKit, 24 ruta /studio Chromium/WebKit y 1 smoke FFmpeg/FFprobe sintético = **239 comprobaciones**.
+- Run **44061619417**, sobre HEAD **b84c2360d79493cbd3985ebb44817b5134187fcd**: ambos jobs exitosos; 104 pruebas Python, 71 editor Chromium, 40 puente Chromium/WebKit, 24 ruta /studio Chromium/WebKit y 1 smoke FFmpeg/FFprobe sintético = **240 comprobaciones**.
+- Estas pruebas no certifican el equipo Mac, las voces reales, la tarea PoYo ni un MP4 real del propietario.
+
+### Release y bloqueos
+
+- main sigue en **a07670c566b6c3cb04f387a553b80fffeacb08a9**.
+- PR #10 continúa abierta y en borrador, dirigida a main; comparación: 74 commits ahead / 0 behind.
+- PR #13 continúa abierta y en borrador, basada exactamente en el HEAD de PR #10; comparación: 28 commits ahead / 0 behind.
+- No se consultó el proveedor PoYo, no se llamó a submit, no se recuperó el task 0AHQMX2G2T4ZZE6O y no se consumieron créditos.
+- No existe un conector de Site para appgprj_6ac9279142e881918864b413032701e2 ni para /api/ai/learning; no se ejecutó GET ni POST tick.
+- No hubo merge ni despliegue. La validación en la Mac, respaldo/restauración, conexión del banco de voces y prueba audiovisual real de 35 s siguen pendientes.
