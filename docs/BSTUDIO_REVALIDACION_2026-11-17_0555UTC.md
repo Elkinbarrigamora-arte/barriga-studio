@@ -1,5 +1,8 @@
 # Revalidación operativa B STUDIO — 17-nov-2026 05:55 UTC
 
+> Privacidad: se omitieron identificadores, revisiones y títulos de proyectos del propietario; se conservan únicamente estados técnicos necesarios para la auditoría.
+
+
 ## Fuente y alcance
 Lecturas autenticadas de Barriga Studio y GitHub realizadas en este ciclo. No se accedió al equipo local, a PoYo ni al Site de aprendizaje. Este registro es evidencia de estado, no certificación de producción.
 
@@ -12,7 +15,7 @@ Lecturas autenticadas de Barriga Studio y GitHub realizadas en este ciclo. No se
 - La capacidad declarada de exportación es montaje en navegador con escenas, narración y movimiento de cámara; no equivale a generación neuronal de movimiento.
 
 ## Reproducción de issue #12
-Proyecto consultado: `077d6bce-53cb-4676-ba1a-b07903e0f8fc`, «Mis últimas gotas para ti» (copia del dispositivo), revisión `0b196e44-c7b4-48d1-bb75-82b10b6e2b74`.
+Proyecto consultado: `[ID DE PROYECTO OMITIDO]`, «proyecto narrativo del propietario» (copia del dispositivo), revisión `[ID DE PROYECTO OMITIDO]`.
 - Seis escenas, todas `mediaType=image`, de cinco segundos cada una.
 - `audioReady=true`, `localNarration=true`, `videoPreparation=null`.
 - Estado: `percent=100`, `complete=true`, `final=true`, etapa «Montaje final completado» y etiqueta «Video listo para descargar».
