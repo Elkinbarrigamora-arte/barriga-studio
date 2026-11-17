@@ -410,8 +410,9 @@ def make_handler(studio, media_dir, runtime_asset, token, port, model, voices_di
                         "provider_status": status})
                 url = find_video_url(task)
                 validate_download_url(url)
-                num_bytes = save_video(url, destination)
-                details = probe_video(destination)
+                # save_video returns the byte count and the FFprobe/SHA-256
+                # metadata from the staged file it validated before atomic publish.
+                num_bytes, details = save_video(url, destination)
                 return self.send_json(200, {
                     "status": "downloaded", "video": destination.name, "bytes": num_bytes,
                     "media_probe": details, "new_generation_credits": 0})

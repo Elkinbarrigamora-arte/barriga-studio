@@ -164,6 +164,31 @@ class UnifiedBridgeTests(unittest.TestCase):
         self.assertIn("No se reenvió", body.decode("utf-8"))
         self.assertEqual(len(list(self.media.iterdir())), 1)
 
+    def test_successful_recovery_returns_numeric_bytes_and_verified_probe(self):
+        task_id = "0AHQMX2G2T4ZZE6O"
+        probe = {
+            "sha256": "a" * 64,
+            "duracion_segundos": 35.0,
+            "tiene_audio": True,
+            "video": [{"codec_type": "video", "width": 480, "height": 854}],
+        }
+        with mock.patch.object(bridge, "read_existing_task",
+                               return_value={"status": "succeeded", "task_id": task_id}), \
+             mock.patch.object(bridge, "find_video_url",
+                               return_value="https://storage.poyo.ai/videos/existing.mp4"), \
+             mock.patch.object(bridge, "validate_download_url"), \
+             mock.patch.object(bridge, "save_video", return_value=(123456, probe)) as save:
+            status, _, body = self.send("/api/recover", "POST",
+                                        {"task_id": task_id}, token=self.token)
+        self.assertEqual(status, 200)
+        payload = json.loads(body)
+        self.assertEqual(payload["status"], "downloaded")
+        self.assertEqual(payload["bytes"], 123456)
+        self.assertIsInstance(payload["bytes"], int)
+        self.assertEqual(payload["media_probe"], probe)
+        self.assertEqual(payload["new_generation_credits"], 0)
+        save.assert_called_once()
+
     def test_existing_local_video_does_not_requery_provider(self):
         (self.media / "poyo-0AHQMX2G2T4ZZE6O.mp4").write_bytes(self.movie.read_bytes())
         with mock.patch.object(bridge, "read_existing_task") as called:
