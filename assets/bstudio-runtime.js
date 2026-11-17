@@ -190,7 +190,15 @@ function mount(){
   try{
    const data=await api("/api/recover",{method:"POST",
      headers:{"Content-Type":"application/json"},body:JSON.stringify({task_id:taskId})});
-   recoveryStatus.textContent=(data.status==="downloaded"?"MP4 recuperado: ":"MP4 existente: ")+data.video;
+   if(data.status==="downloaded"){
+    recoveryStatus.textContent="MP4 recuperado y validado: "+data.video+
+      (Number.isFinite(data.bytes)?" ("+data.bytes+" bytes)":"");
+   }else if(data.status==="already_downloaded"){
+    recoveryStatus.textContent="Archivo local validado; vínculo con la tarea no verificado: "+
+      data.video+(data.message?" · "+data.message:"");
+   }else{
+    throw Error("Respuesta de recuperación no reconocida; no se marcó como listo.");
+   }
    await updateVideos();
   }catch(err){
    recoveryStatus.textContent="No se recuperó: "+err.message+". No se generó otra tarea.";

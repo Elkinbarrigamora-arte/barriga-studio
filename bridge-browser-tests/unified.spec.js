@@ -157,3 +157,23 @@ test("20 botón actualizar voces consulta al mismo servidor local",async ({page}
   await pane(page).getByRole("button",{name:"Actualizar voces"}).click();
   expect((await response).status()).toBe(200);
 });
+
+test("21 un MP4 local válido no se atribuye a PoYo sin vínculo verificado",async ({page})=>{
+  await page.route("**/api/recover",async route=>route.fulfill({
+    status:200,contentType:"application/json",
+    body:JSON.stringify({
+      status:"already_downloaded",
+      video:"poyo-archivo-local.mp4",
+      task_linkage:"filename_only_unverified",
+      message:"Archivo local validado; vínculo con la tarea no verificado.",
+      media_probe:{sha256:"a".repeat(64),duracion_segundos:35,tiene_audio:true}
+    })
+  }));
+  await page.goto("/");
+  await pane(page).locator("#bst-task").fill("TASKLOCAL12345678");
+  await pane(page).getByRole("button",{name:"Consultar y recuperar MP4"}).click();
+  await expect(pane(page).locator("#bst-recovery-status"))
+    .toContainText("vínculo con la tarea no verificado");
+  await expect(pane(page).locator("#bst-recovery-status"))
+    .not.toContainText("MP4 recuperado");
+});
