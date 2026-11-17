@@ -15,7 +15,7 @@ PUBLIC_DOCS = (
     ROOT / "docs" / "REEL_35S_QA.md",
 )
 UUID_PATTERN = re.compile(
-    r"\\b[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}\\b",
+    r"\b[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}\b",
     re.IGNORECASE,
 )
 
