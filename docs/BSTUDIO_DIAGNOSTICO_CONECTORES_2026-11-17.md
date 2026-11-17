@@ -1,5 +1,8 @@
 # Diagnóstico operativo de B STUDIO — 2026-11-17
 
+> Privacidad: se omitieron identificadores, revisiones y títulos de proyectos del propietario; se conservan únicamente estados técnicos necesarios para la auditoría.
+
+
 **Tipo:** evidencia de solo lectura obtenida mediante los conectores autenticados disponibles.  
 **No es:** certificación del equipo Mac, consulta directa a PoYo, prueba de inferencia ni autorización de despliegue.
 
@@ -25,7 +28,7 @@ La consulta de trabajos devuelve únicamente los últimos estados guardados y no
 
 - Los 25 trabajos recientes expuestos son de tipo `image`; el resultado no contiene un trabajo de video ni el task_id PoYo `0AHQMX2G2T4ZZE6O`.
 - Esto **no demuestra** que la tarea PoYo no exista; solo confirma que no está en ese inventario del estudio.
-- La lista de 25 proyectos recientes contiene varias copias con títulos repetidos, en particular «Mis últimas gotas para ti» y «Un mango maduro y un mango». No deduplicar ni borrar automáticamente: primero se debe comparar el almacenamiento local real y hacer respaldo verificable.
+- La lista de 25 proyectos recientes contiene varias copias con títulos repetidos, en particular «proyecto narrativo del propietario» y «otro proyecto del propietario». No deduplicar ni borrar automáticamente: primero se debe comparar el almacenamiento local real y hacer respaldo verificable.
 
 ## Estado de GitHub observado
 
@@ -46,9 +49,9 @@ La lectura autenticada más reciente confirma:
 - El único dispositivo registrado sigue siendo **Mi computador Windows**, emparejado pero desconectado; la Mac no aparece registrada.
 - Core sigue sin configurar y sin inferencia verificada.
 - `ownVideoConfigured=false`, `privateVideoReady=false`, `privateSpeechReady=false`.
-- El proyecto más reciente de la misma historia, ID `077d6bce-53cb-4676-ba1a-b07903e0f8fc`, contiene el mismo guion de «Mis últimas gotas para ti», seis escenas y `mediaType=image` en todas. Informa `audioReady=true` y `localNarration=true`, pero `videoPreparation=null`; aun así, el estado reporta `percent=100`, `complete=true`, `final=true` y etiqueta «Video listo para descargar».
+- El proyecto más reciente de la misma historia, ID `[ID DE PROYECTO OMITIDO]`, contiene el mismo guion de «proyecto narrativo del propietario», seis escenas y `mediaType=image` en todas. Informa `audioReady=true` y `localNarration=true`, pero `videoPreparation=null`; aun así, el estado reporta `percent=100`, `complete=true`, `final=true` y etiqueta «Video listo para descargar».
 - El snapshot no expone ruta de MP4, ID de artefacto, tamaño, SHA-256 ni metadatos de FFprobe. Por tanto, la etiqueta final **no está respaldada por evidencia de archivo**. Esto reproduce el defecto de issue #12 en una copia más reciente; no demuestra por sí solo que no exista un archivo fuera de lo expuesto por el conector.
-- La copia anterior `d525104e-5f1b-42e3-9328-88c6fb8fef26` sigue mostrando 80 %, seis imágenes, narración local y `complete=false/final=false`.
+- La copia anterior `[ID DE PROYECTO OMITIDO]` sigue mostrando 80 %, seis imágenes, narración local y `complete=false/final=false`.
 - El inventario de trabajos recientes sigue mostrando solo trabajos de imagen; no consulta PoYo y no permite concluir si la tarea externa existe o no.
 
 No se modificó, eliminó ni deduplicó ningún proyecto. La corrección de issue #12 requiere una puerta de estado basada en un MP4 asociado al proyecto y validado, más una regresión específica; las pruebas de CI actuales no demuestran que esa puerta ya esté implementada.
