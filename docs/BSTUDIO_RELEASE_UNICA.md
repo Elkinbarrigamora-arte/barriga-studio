@@ -1,5 +1,8 @@
 # B STUDIO Élite — Política de versión única y publicación controlada
 
+> Privacidad: se omitieron identificadores, revisiones y títulos de proyectos del propietario; se conservan únicamente estados técnicos necesarios para la auditoría.
+
+
 **Última revisión:** 17-nov-2026.  
 **Estado:** candidata en revisión; no publicada ni fusionada.
 
@@ -83,7 +86,7 @@ Consulta autenticada de solo lectura del 17-nov-2026:
 
 ### Estado de un proyecto observado
 
-El proyecto `d525104e-5f1b-42e3-9328-88c6fb8fef26` («Mis últimas gotas para ti», una copia del dispositivo) actualmente informa:
+El proyecto `[ID DE PROYECTO OMITIDO]` («proyecto narrativo del propietario», una copia del dispositivo) actualmente informa:
 
 - 6 escenas, todas `mediaType=image`.
 - `audioReady=true` y `localNarration=true`.
@@ -127,8 +130,8 @@ Esta sección supersede los snapshots anteriores cuando describen el mismo proye
 - PR #10 continúa abierta y en borrador, HEAD `0cf6e7475d8ac627517c76c6cf8504817904f361`. `main` no cambió y la comparación confirma 74 commits ahead / 0 behind.
 - PR #13 continúa abierta y en borrador, base exacta en PR #10 HEAD, HEAD actual `5aaa4de9553c6c7c823904805cda04812ff155a5`.
 - Actions run **44007706113** validó ese HEAD: 102 pruebas Python, 71 editor Chromium, 40 puente Chromium/WebKit, 24 ruta `/studio` Chromium/WebKit y 1 FFmpeg/FFprobe sintético = **238 comprobaciones aprobadas**. Los logs confirman que el smoke produjo un reel sintético de 35 s, rechazó una narración silenciosa, conservó un MP4 sintético válido y rechazó uno truncado. No certifica la Mac ni un MP4 real.
-- Una copia más reciente de «Mis últimas gotas para ti», ID `077d6bce-53cb-4676-ba1a-b07903e0f8fc`, contiene seis escenas `mediaType=image`, `audioReady=true`, `localNarration=true`, `videoPreparation=null`, pero informa `percent=100`, `complete=true`, `final=true` y «Video listo para descargar». No expone ruta de MP4, artefacto, tamaño, SHA-256 ni FFprobe. Es evidencia nueva de que issue #12 sigue sin resolverse en los datos observados; no demuestra que no exista un archivo externo al snapshot.
-- La copia anterior `d525104e-5f1b-42e3-9328-88c6fb8fef26` sigue en 80 %, `complete=false/final=false`, con las mismas seis imágenes y narración local.
+- Una copia más reciente de «proyecto narrativo del propietario», ID `[ID DE PROYECTO OMITIDO]`, contiene seis escenas `mediaType=image`, `audioReady=true`, `localNarration=true`, `videoPreparation=null`, pero informa `percent=100`, `complete=true`, `final=true` y «Video listo para descargar». No expone ruta de MP4, artefacto, tamaño, SHA-256 ni FFprobe. Es evidencia nueva de que issue #12 sigue sin resolverse en los datos observados; no demuestra que no exista un archivo externo al snapshot.
+- La copia anterior `[ID DE PROYECTO OMITIDO]` sigue en 80 %, `complete=false/final=false`, con las mismas seis imágenes y narración local.
 - El conector de Barriga Studio sigue mostrando solo el dispositivo Windows emparejado pero desconectado; la Mac no aparece. Core y los motores privados de video/voz siguen sin verificación.
 - El inventario de trabajos sigue mostrando trabajos de imagen, no una consulta a PoYo. El task_id `0AHQMX2G2T4ZZE6O` no se consultó en el proveedor ni se recuperó.
 - No hay acción de conector disponible en esta ejecución para consultar el endpoint del Site `appgprj_6ac9279142e881918864b413032701e2`; por ello no se ejecutó GET ni POST `tick`.
@@ -149,7 +152,7 @@ Esta sección es la lectura autenticada más reciente de este ciclo y sustituye 
 
 ### Reproducción actual de issue #12
 
-Lectura del proyecto más reciente 077d6bce-53cb-4676-ba1a-b07903e0f8fc («Mis últimas gotas para ti», copia del dispositivo):
+Lectura del proyecto más reciente [ID DE PROYECTO OMITIDO] («proyecto narrativo del propietario», copia del dispositivo):
 
 - Seis escenas, todas mediaType=image, de 5 segundos cada una.
 - audioReady=true, localNarration=true, videoPreparation=null.
@@ -157,7 +160,7 @@ Lectura del proyecto más reciente 077d6bce-53cb-4676-ba1a-b07903e0f8fc («Mis �
 - La respuesta no incluye ruta/URL de MP4, ID de artefacto, tamaño, SHA-256 ni resultado FFprobe.
 - Por tanto, el estado de entrega no está respaldado por evidencia de archivo en el snapshot. Esto reproduce el caso de issue #12; no demuestra que no exista un archivo externo que el conector no exponga.
 
-La copia d525104e-5f1b-42e3-9328-88c6fb8fef26 sigue en un estado distinto y no final: seis imágenes, narración local, videoPreparation=null, 80 %, complete=false, final=false, «Escenas listas · falta montar el video».
+La copia [ID DE PROYECTO OMITIDO] sigue en un estado distinto y no final: seis imágenes, narración local, videoPreparation=null, 80 %, complete=false, final=false, «Escenas listas · falta montar el video».
 
 No se editó, eliminó ni deduplicó ningún proyecto.
 
@@ -198,13 +201,13 @@ Consulta de Barriga Studio a las **2026-11-17T06:59:22.535Z**:
 
 ### Reproducción fresca de issue #12
 
-El proyecto más reciente consultado, **077d6bce-53cb-4676-ba1a-b07903e0f8fc**, «Mis últimas gotas para ti», revisión 0b196e44-c7b4-48d1-bb75-82b10b6e2b74, conserva seis escenas de imagen de cinco segundos cada una:
+El proyecto más reciente consultado, **[ID DE PROYECTO OMITIDO]**, «proyecto narrativo del propietario», revisión [ID DE PROYECTO OMITIDO], conserva seis escenas de imagen de cinco segundos cada una:
 
 - audioReady=true, localNarration=true, videoPreparation=null.
 - A pesar de ello, el snapshot informa percent=100, complete=true, final=true, etapa «Montaje final completado» y etiqueta «Video listo para descargar».
 - La respuesta del conector no incluye ruta/URL de MP4, ID de artefacto, tamaño, SHA-256 ni resultado FFprobe. Por tanto, el estado de entrega no queda respaldado por evidencia de archivo en este snapshot; no se afirma que no pueda existir un archivo externo no expuesto por el conector.
 
-La copia **d525104e-5f1b-42e3-9328-88c6fb8fef26** se mantiene en estado distinto: seis escenas de imagen, narración local, videoPreparation=null, 80 %, complete=false, final=false. No se modificó, eliminó ni deduplicó ninguna copia.
+La copia **[ID DE PROYECTO OMITIDO]** se mantiene en estado distinto: seis escenas de imagen, narración local, videoPreparation=null, 80 %, complete=false, final=false. No se modificó, eliminó ni deduplicó ninguna copia.
 
 ### Trabajos, PoYo y Site
 
@@ -237,7 +240,7 @@ Consulta autenticada de Barriga Studio a las **2026-11-17T08:59:57.497Z**:
 
 ### Reproducción actual de issue #12
 
-Lectura del proyecto **077d6bce-53cb-4676-ba1a-b07903e0f8fc**, revisión `0b196e44-c7b4-48d1-bb75-82b10b6e2b74`, «Mis últimas gotas para ti»:
+Lectura del proyecto **[ID DE PROYECTO OMITIDO]**, revisión `[ID DE PROYECTO OMITIDO]`, «proyecto narrativo del propietario»:
 
 - Seis escenas, todas `mediaType=image`, de cinco segundos cada una.
 - `audioReady=true`, `localNarration=true`, `videoPreparation=null`.
@@ -269,7 +272,7 @@ Consulta autenticada de solo lectura del estudio a las **2026-11-17T10:03:22.881
 - El único dispositivo registrado continúa siendo «Mi computador Windows», emparejado pero desconectado; la Mac del propietario no aparece registrada.
 - Core continúa sin configurar, seleccionar o verificar inferencia (configured=false, gatewayConnected=false, inferenceVerified=false).
 - La narración local está disponible como capacidad del dispositivo, pero el banco de voces original del propietario no está conectado/verificado. El video privado tampoco está configurado.
-- La copia más reciente de «Mis últimas gotas para ti» informa 100 %, complete=true, final=true y «Video listo para descargar», aunque sus seis escenas son imágenes, localNarration=true y videoPreparation=null. El snapshot no expone ruta/URL MP4, ID de artefacto, tamaño, SHA-256 ni FFprobe.
+- La copia más reciente de «proyecto narrativo del propietario» informa 100 %, complete=true, final=true y «Video listo para descargar», aunque sus seis escenas son imágenes, localNarration=true y videoPreparation=null. El snapshot no expone ruta/URL MP4, ID de artefacto, tamaño, SHA-256 ni FFprobe.
 - Otra copia de la misma historia permanece en 80 %, complete=false, con seis imágenes, narración local y videoPreparation=null. Las copias conservan estados distintos; no se modificó ni deduplicó ninguna.
 - Los últimos trabajos guardados por el estudio son de tipo imagen. Este inventario no consulta PoYo y no demuestra que la tarea externa exista o no exista.
 
