@@ -13,7 +13,7 @@ def check_recovery(source, root):
     sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tools"))
     from bstudio_poyo_recover import save_video
 
-    url = "https://cdn.doculator.org/synthetic.mp4"
+    url = "https://storage.poyo.ai/synthetic.mp4"
 
     class Response(io.BytesIO):
         headers = {}
