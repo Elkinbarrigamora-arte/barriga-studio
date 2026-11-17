@@ -1,5 +1,8 @@
 # Revalidación operativa de B STUDIO — 2026-11-17 08:01 UTC
 
+> Privacidad: se omitieron identificadores, revisiones y títulos de proyectos del propietario; se conservan únicamente estados técnicos necesarios para la auditoría.
+
+
 **Alcance:** lectura autenticada de solo lectura del estudio, proyectos, repositorio y ejecuciones CI. No es certificación del equipo Mac ni autorización de publicación.
 
 ## Dispositivo, Core y medios
@@ -13,7 +16,7 @@ Barriga Studio respondió a las **2026-11-17T08:01:24.945Z**.
 
 ## Reproducción fresca de issue #12
 
-Proyecto consultado: **077d6bce-53cb-4676-ba1a-b07903e0f8fc**, revisión 0b196e44-c7b4-48d1-bb75-82b10b6e2b74, título «Mis últimas gotas para ti» (copia del dispositivo).
+Proyecto consultado: **[ID DE PROYECTO OMITIDO]**, revisión [ID DE PROYECTO OMITIDO], título «proyecto narrativo del propietario» (copia del dispositivo).
 
 - Seis escenas, cada una de cinco segundos; todas tienen mediaType=image.
 - audioReady=true, localNarration=true, videoPreparation=null.
