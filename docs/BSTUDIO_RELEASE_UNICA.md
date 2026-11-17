@@ -63,8 +63,7 @@ Una sola aplicación oficial de Barriga Studio, una sola URL de producción y un
 
 - URL: https://github.com/Elkinbarrigamora-arte/barriga-studio/pull/13
 - Rama: `feat/bstudio-recovery-audio-guard-20261116`; base explícita: HEAD actual de PR #10.
-- HEAD de código probado: `b3dc4084edf80adad6461ee36aa71ed1f67ce05d`.
-- El HEAD puede incluir commits documentales posteriores al código probado; comprobar el SHA del código y el resultado CI por separado. La actualización de esta política no modifica el código de ejecución.
+- HEAD anterior documentado: `b3dc4084edf80adad6461ee36aa71ed1f67ce05d`.
 - Actions run **43992043162**, ambos jobs exitosos: 102 Python + 71 editor Chromium + 40 puente Chromium/WebKit + 24 ruta `/studio` Chromium/WebKit + 1 smoke FFmpeg/FFprobe sintético = **238 comprobaciones**.
 - El smoke adicional rechazó una narración sintética silenciosa, conservó un MP4 sintético válido y rechazó uno truncado.
 - Añade validación de redirecciones/hosts PoYo, coincidencia del task_id, FFprobe obligatorio, SHA-256, publicación atómica sin sobrescritura y duración independiente de las pistas de audio/video.
@@ -120,3 +119,18 @@ Mantenerlo abierto hasta:
 - Después: comprobar URL, controles, persistencia y restauración; conservar rollback funcional.
 
 **Estado final de esta revisión: CANDIDATAS EN BORRADOR. NO FUSIONAR. NO DESPLEGAR. NO GENERAR NI CONSUMIR CRÉDITOS.**
+
+## Revalidación posterior — 17-nov-2026 03:59 UTC
+
+Esta sección supersede los snapshots anteriores cuando describen el mismo proyecto o rama:
+
+- PR #10 continúa abierta y en borrador, HEAD `0cf6e7475d8ac627517c76c6cf8504817904f361`. `main` no cambió y la comparación confirma 74 commits ahead / 0 behind.
+- PR #13 continúa abierta y en borrador, base exacta en PR #10 HEAD, HEAD actual `5aaa4de9553c6c7c823904805cda04812ff155a5`.
+- Actions run **44007706113** validó ese HEAD: 102 pruebas Python, 71 editor Chromium, 40 puente Chromium/WebKit, 24 ruta `/studio` Chromium/WebKit y 1 FFmpeg/FFprobe sintético = **238 comprobaciones aprobadas**. Los logs confirman que el smoke produjo un reel sintético de 35 s, rechazó una narración silenciosa, conservó un MP4 sintético válido y rechazó uno truncado. No certifica la Mac ni un MP4 real.
+- Una copia más reciente de «Mis últimas gotas para ti», ID `077d6bce-53cb-4676-ba1a-b07903e0f8fc`, contiene seis escenas `mediaType=image`, `audioReady=true`, `localNarration=true`, `videoPreparation=null`, pero informa `percent=100`, `complete=true`, `final=true` y «Video listo para descargar». No expone ruta de MP4, artefacto, tamaño, SHA-256 ni FFprobe. Es evidencia nueva de que issue #12 sigue sin resolverse en los datos observados; no demuestra que no exista un archivo externo al snapshot.
+- La copia anterior `d525104e-5f1b-42e3-9328-88c6fb8fef26` sigue en 80 %, `complete=false/final=false`, con las mismas seis imágenes y narración local.
+- El conector de Barriga Studio sigue mostrando solo el dispositivo Windows emparejado pero desconectado; la Mac no aparece. Core y los motores privados de video/voz siguen sin verificación.
+- El inventario de trabajos sigue mostrando trabajos de imagen, no una consulta a PoYo. El task_id `0AHQMX2G2T4ZZE6O` no se consultó en el proveedor ni se recuperó.
+- No hay acción de conector disponible en esta ejecución para consultar el endpoint del Site `appgprj_6ac9279142e881918864b413032701e2`; por ello no se ejecutó GET ni POST `tick`.
+
+**Acción indispensable pendiente:** conectar y registrar la Mac real, sin detener procesos ni sobrescribir archivos locales. Hasta entonces no hay respaldo, recuperación PoYo, inventario verificable de voces ni prueba end-to-end en el equipo.
