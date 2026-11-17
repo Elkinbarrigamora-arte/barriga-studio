@@ -189,13 +189,36 @@ class UnifiedBridgeTests(unittest.TestCase):
         self.assertEqual(payload["new_generation_credits"], 0)
         save.assert_called_once()
 
-    def test_existing_local_video_does_not_requery_provider(self):
-        (self.media / "poyo-0AHQMX2G2T4ZZE6O.mp4").write_bytes(self.movie.read_bytes())
-        with mock.patch.object(bridge, "read_existing_task") as called:
+    def test_existing_local_video_is_probed_without_requerying_provider(self):
+        task_id = "0AHQMX2G2T4ZZE6O"
+        destination = self.media / ("poyo-" + task_id + ".mp4")
+        destination.write_bytes(self.movie.read_bytes())
+        probe = {"sha256": "b" * 64, "duracion_segundos": 35.0, "tiene_audio": True}
+        with mock.patch.object(bridge, "read_existing_task") as called, \\
+             mock.patch.object(bridge, "probe_video", return_value=probe) as checked:
             status, _, body = self.send("/api/recover", "POST",
-                                        {"task_id": "0AHQMX2G2T4ZZE6O"}, token=self.token)
+                                        {"task_id": task_id}, token=self.token)
         self.assertEqual(status, 200)
-        self.assertIn(b"already_downloaded", body)
+        payload = json.loads(body)
+        self.assertEqual(payload["status"], "already_downloaded")
+        self.assertEqual(payload["media_probe"], probe)
+        self.assertEqual(payload["task_linkage"], "filename_only_unverified")
+        checked.assert_called_once_with(destination)
+        called.assert_not_called()
+
+    def test_invalid_existing_local_video_is_not_reported_as_downloaded(self):
+        task_id = "0AHQMX2G2T4ZZE6O"
+        destination = self.media / ("poyo-" + task_id + ".mp4")
+        original = b"corrupt-local-file"
+        destination.write_bytes(original)
+        with mock.patch.object(bridge, "read_existing_task") as called, \\
+             mock.patch.object(bridge, "probe_video",
+                               side_effect=RuntimeError("ffprobe no pudo validar el archivo MP4")):
+            status, _, body = self.send("/api/recover", "POST",
+                                        {"task_id": task_id}, token=self.token)
+        self.assertEqual(status, 502)
+        self.assertIn(b"ffprobe no pudo validar", body)
+        self.assertEqual(destination.read_bytes(), original)
         called.assert_not_called()
 
     def test_media_symlinks_are_not_exposed(self):

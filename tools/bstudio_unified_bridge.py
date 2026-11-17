@@ -398,10 +398,17 @@ def make_handler(studio, media_dir, runtime_asset, token, port, model, voices_di
                 if not isinstance(task_id, str) or not TASK_RE.fullmatch(task_id):
                     return self.send_json(400, {"error": "Identificador de tarea inválido."})
                 destination = media_dir / ("poyo-" + task_id + ".mp4")
-                if destination.exists():
+                if destination.exists() or destination.is_symlink():
+                    # A filename alone does not prove that this file came from
+                    # the requested task. Validate the local media before
+                    # reporting it as available, and never re-query or resubmit.
+                    details = probe_video(destination)
                     return self.send_json(200, {
                         "status": "already_downloaded",
-                        "video": destination.name, "message": "Archivo local encontrado; sin duplicarlo."})
+                        "video": destination.name,
+                        "media_probe": details,
+                        "task_linkage": "filename_only_unverified",
+                        "message": "Archivo local validado; vínculo con la tarea no verificado."})
                 task = read_existing_task(task_id)
                 status = str(task.get("status") or task.get("raw_status") or "").lower()
                 if status not in ("succeeded", "finished", "completed", "success"):
