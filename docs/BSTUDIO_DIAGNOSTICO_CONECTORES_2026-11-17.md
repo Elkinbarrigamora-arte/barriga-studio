@@ -5,7 +5,7 @@
 
 ## Estado del dispositivo y Core
 
-Consulta de Barriga Studio: `2026-11-17T01:56:52.974Z`.
+Consulta de Barriga Studio: `2026-11-17T03:00:19.035Z`.
 
 - Existe un registro de dispositivo emparejado llamado **Mi computador Windows**, pero `connected=false` y no tiene `lastSeenAt`.
 - La Mac del estudio no aparece entre los dispositivos registrados.
@@ -33,7 +33,7 @@ Repositorio: `Elkinbarrigamora-arte/barriga-studio`.
 
 - `main`: `a07670c566b6c3cb04f387a553b80fffeacb08a9`.
 - PR #10 sigue abierta y en borrador; base `main`, HEAD `0cf6e7475d8ac627517c76c6cf8504817904f361`.
-- PR #13 sigue abierta y en borrador; base `feat/bstudio-elite-recovery-qa-20261110`, HEAD `b3dc4084edf80adad6461ee36aa71ed1f67ce05d`.
+- PR #13 sigue abierta y en borrador; base `feat/bstudio-elite-recovery-qa-20261110`. El código probado corresponde a `b3dc4084edf80adad6461ee36aa71ed1f67ce05d`; commits documentales posteriores no cambian ese código.
 - Actions run `43992043162` terminó con ambos trabajos exitosos sobre el merge ref de PR #13: 102 pruebas Python, 71 de navegador del editor, 40 del puente Chromium/WebKit, 24 de la ruta /studio Chromium/WebKit y 1 smoke FFmpeg sintético. Total: 238 comprobaciones.
 - Los medios de FFmpeg son sintéticos; la CI no certifica el equipo, el banco de voces real, la tarea PoYo ni un motor neuronal conectado.
 
