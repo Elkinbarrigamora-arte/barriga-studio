@@ -42,3 +42,7 @@ No existe una acción de conector disponible en esta ejecución para el Site `ap
 - Sin generación nueva ni consumo de créditos.
 - Mantener PR #10 y PR #13 en borrador.
 - Bloqueo operativo para la validación local: registrar y conectar la Mac real, respaldar y reconciliar sus archivos sin sobrescribirlos. Hasta entonces no declarar recuperado el MP4, conectadas las voces ni certificado el reel real de 35 s.
+
+## Secuencia de archivado
+
+El snapshot de rama descrito arriba se tomó antes de crear este archivo: en ese instante PR #13 apuntaba a `a18b1dd408a5d28b1a4b460c90c11776667a0cce`. Este documento se añadió después como commit exclusivamente documental; la consulta de Actions para ese commit de archivo devolvió cero ejecuciones. El CI 44020713842 valida el snapshot anterior y no se atribuye a este nuevo archivo.
