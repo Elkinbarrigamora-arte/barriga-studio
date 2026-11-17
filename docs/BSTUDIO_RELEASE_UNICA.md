@@ -1,65 +1,122 @@
 # B STUDIO Élite — Política de versión única y publicación controlada
 
-## Objetivo
-Una sola aplicación oficial de Barriga Studio, con una única URL de producción y una única versión marcada como vigente. Las ramas de GitHub, copias de seguridad y entornos de prueba son **internos** y no deben presentarse al usuario como versiones alternativas.
+**Última revisión:** 17-nov-2026.  
+**Estado:** candidata en revisión; no publicada ni fusionada.
 
-## Fuente de verdad
-1. **Producción actual:** mantener activa la última versión desplegada hasta que la candidata esté completamente comprobada.
-2. **Mac del propietario:** contiene modificaciones y motores que todavía no están reflejados en GitHub; su inventario y respaldo son pasos imprescindibles.
-3. **GitHub `main`:** será el código fuente canónico después de reconciliar los archivos reales, revisar secretos y fusionar la candidata verificada.
-4. **Proyectos y voces:** datos persistentes separados del código; nunca reemplazar ni borrar por una actualización.
+## Objetivo y fuente de verdad
+
+Una sola aplicación oficial de Barriga Studio, una sola URL de producción y una sola versión vigente. Las ramas de GitHub y las pruebas internas no son productos alternativos.
+
+1. Mantener activa la producción actual hasta certificar la candidata.
+2. La Mac del propietario es fuente de datos y código local: contiene modificaciones que no están en GitHub.
+3. No reconciliar la Mac contra Git hasta hacer inventario y respaldo verificable.
+4. Los proyectos, voces y medios son datos persistentes; no reemplazarlos ni borrarlos durante una actualización.
+5. No exigir entrenamiento de pesos: Barriga IA debe coordinar modelos, memoria, herramientas y validadores existentes.
 
 ## Puertas obligatorias antes de publicar
-- [x] 96 pruebas unitarias Python en la candidata PR #10 (GitHub Actions).
-- [x] 69 pruebas de navegador del editor en Chromium.
-- [x] 40 pruebas del puente integrado en Chromium + WebKit.
-- [x] 24 pruebas de la misma ruta original `/studio` con overlay en Chromium + WebKit.
-- [x] 1 smoke test audiovisual FFmpeg con medios sintéticos.
-- [ ] Auditoría completa de los cambios que solo existen en la Mac, conservando archivos no versionados.
-- [ ] Copia de seguridad restaurable y prueba de restauración (incluido almacenamiento de proyectos).
-- [ ] Inventario de voces existentes, licencias e identidad de personajes, sin volver a crearlas.
-- [ ] Recuperar el archivo real de la tarea PoYo `0AHQMX2G2T4ZZE6O` sin nuevo cargo.
-- [ ] Generación de escenas reales, continuidad, descarga y montaje real de un reel de 35 segundos con voz.
-- [ ] Pruebas de todos los controles de la versión desplegable, sin botones rotos ni simulación de funciones no conectadas.
-- [ ] Seguridad, autenticación, persistencia tras cerrar/reabrir, comprobación de gastos y despliegue con rollback.
-- [ ] Comprobación posterior al despliegue de la URL oficial y los proyectos existentes.
 
-**Regla:** si una casilla crítica está pendiente o falla, NO se publica ni se declara una versión final.
+- [x] CI offline de la candidata PR #10: 96 pruebas Python.
+- [x] Editor: 69 pruebas Chromium.
+- [x] Puente integrado: 40 pruebas Chromium + WebKit.
+- [x] URL original `/studio` con overlay: 24 pruebas Chromium + WebKit.
+- [x] 1 smoke audiovisual FFmpeg/FFprobe con medios sintéticos.
+- [ ] Acceso autenticado a la Mac real y auditoría de cambios locales/no versionados.
+- [ ] Respaldo restaurable de código, proyectos, voces y medios; prueba de restauración.
+- [ ] Inventario y reproducción del banco de voces existente, sin sustituirlo.
+- [ ] Recuperación del task PoYo existente `0AHQMX2G2T4ZZE6O`, sin `submit` ni nueva generación.
+- [ ] FFprobe + SHA-256 del MP4 recuperado y confirmación de movimiento real.
+- [ ] Reel real de 35 s con voz existente, sincronización y continuidad visual.
+- [ ] Persistencia tras cerrar/reabrir, reanudación sin duplicados y notificaciones verificadas.
+- [ ] Todos los controles de la aplicación probados; funciones no conectadas deshabilitadas y etiquetadas.
+- [ ] Seguridad, rollback restaurable y verificación posterior en la URL oficial.
+
+**Regla:** cualquier puerta crítica pendiente bloquea el merge y el despliegue.
 
 ## Contrato de evidencia audiovisual
-- Un estado de proyecto al 100 %, `final=true` o “listo para descargar” no basta por sí solo para afirmar que existe un MP4.
-- La aplicación debe distinguir explícitamente entre **montaje de imágenes con movimiento de cámara** y **video generado por un motor neuronal**.
-- Solo declarar un MP4 disponible cuando exista un archivo real no vacío, con ruta/URL verificable, tamaño y SHA-256 registrados, y FFprobe confirme contenedor, pista de video, duración y pista de audio cuando corresponda.
-- La señal de audio no demuestra que el diálogo sea inteligible: la revisión de voz y sincronización sigue siendo una puerta separada.
-- La sincronización de proyectos debe conservar un identificador estable e idempotencia. No crear copias automáticas ni borrar/reconciliar originales sin comparar primero sus revisiones y recursos.
 
-## Auditoría CI — 16-nov-2026
+- `100 %`, `complete=true`, `final=true` o «video listo» no prueban que exista un MP4.
+- Distinguir montaje de imágenes con movimiento de cámara de video generado por un motor neuronal.
+- Solo mostrar descarga cuando exista un archivo real, no vacío y accesible, con tamaño, SHA-256 y FFprobe satisfactorio.
+- FFprobe debe comprobar contenedor MP4, pista de video, dimensiones, duración y pista de audio cuando se requiere voz.
+- Medir señal de audio no demuestra habla inteligible; escuchar la voz en español y revisar sincronización son puertas separadas.
+- Conservar IDs estables, task_id, versiones y claves de idempotencia. Un timeout de consulta nunca debe enviar otra generación.
 
-### Candidata PR #10
+## Auditoría de ramas y CI — 17-nov-2026
+
+### PR #10 — candidata principal
+
+- URL: https://github.com/Elkinbarrigamora-arte/barriga-studio/pull/10
 - Rama: `feat/bstudio-elite-recovery-qa-20261110`.
-- HEAD verificado: `37cc4d36132f6a64cb78831c79853938af87823d`.
-- `main` verificado: `a07670c566b6c3cb04f387a553b80fffeacb08a9`; la candidata está 73 commits por delante y 0 por detrás.
-- GitHub Actions run **43099601405**, completado con éxito el 11-nov-2026: 96 pruebas Python + 69 Chromium + 40 Chromium/WebKit + 24 Chromium/WebKit + 1 smoke FFmpeg sintético = **230 comprobaciones automatizadas**.
-- El smoke FFmpeg usa medios sintéticos. Las pruebas de navegador usan fixtures/simulaciones del servidor; no certifican la Mac, sus voces, sus archivos ni el motor neuronal real.
+- HEAD: `0cf6e7475d8ac627517c76c6cf8504817904f361`.
+- `main`: `a07670c566b6c3cb04f387a553b80fffeacb08a9`; comparación actual: 74 commits por delante, 0 por detrás.
+- Actions run **43966314947**, ambos jobs exitosos: 96 Python + 69 editor Chromium + 40 puente Chromium/WebKit + 24 ruta `/studio` Chromium/WebKit + 1 FFmpeg sintético = **230 comprobaciones**.
+- El log confirma que FFmpeg produjo un MP4 sintético con video y audio de duración exacta. No prueba el MP4 PoYo real, la Mac ni las voces reales.
+- PR #10 permanece abierta y en borrador.
 
-### Propuesta hija PR #11 — no integrada
+### PR #11 — rama fuente, no integrada
+
 - Rama: `fix/bstudio-reel-track-qa-20261111`; HEAD `c6a368030ac33b0b6eb627d6cc4fb655d7360b91`.
-- GitHub Actions run **43074604284**, completado con éxito el 11-nov-2026: 32 pruebas Python + 71 Chromium + 1 smoke FFmpeg sintético = **104 comprobaciones** en esa rama.
-- Aporta validación de redirecciones/hosts PoYo, verificación FFprobe antes de conservar el archivo, rechazo de IDs de tarea discordantes, publicación atómica sin sobrescritura, SHA-256 y comprobación independiente de duración/señal de audio.
-- Esta ejecución es independiente de la suite PR #10. La rama hija comparte un ancestro anterior y está divergida respecto del HEAD actual de PR #10 (8 commits por delante y 45 por detrás desde el ancestro común). No contar sus pruebas como integración certificada ni fusionarla directamente: reconciliar los cambios sobre el HEAD actual de PR #10 y volver a ejecutar la suite completa.
+- Su CI histórico (run **43074604284**) validó 104 comprobaciones en su propia rama.
+- No copiarla directamente: parte de un ancestro anterior y está divergida respecto de la candidata actual.
 
-## Protocolo de Mac
-El código de la Mac tiene cambios locales modificados y archivos sin seguimiento. No ejecutar `git reset --hard`, `git clean -fd`, `git checkout` sobre la carpeta principal, ni sobrescribir `index.html` o voces; usar un entorno separado y respaldo comprobado.
+### PR #13 — reconciliación selectiva y separada
 
-El script `tools/bstudio_mac_preflight.py` hace un inventario local de solo lectura de Git, FFmpeg, Node, carpetas de motores y puertos. El script no lee claves ni modifica datos, pero no sustituye pruebas reales.
+- URL: https://github.com/Elkinbarrigamora-arte/barriga-studio/pull/13
+- Rama: `feat/bstudio-recovery-audio-guard-20261116`; base explícita: HEAD actual de PR #10.
+- HEAD de código probado: `b3dc4084edf80adad6461ee36aa71ed1f67ce05d`.
+- HEAD documental actual observado: `aa4f05887da1505ea02db8677530a4fd9b0e85cc`; ese commit añade el diagnóstico, sin cambiar el código probado.
+- Actions run **43992043162**, ambos jobs exitosos: 102 Python + 71 editor Chromium + 40 puente Chromium/WebKit + 24 ruta `/studio` Chromium/WebKit + 1 smoke FFmpeg/FFprobe sintético = **238 comprobaciones**.
+- El smoke adicional rechazó una narración sintética silenciosa, conservó un MP4 sintético válido y rechazó uno truncado.
+- Añade validación de redirecciones/hosts PoYo, coincidencia del task_id, FFprobe obligatorio, SHA-256, publicación atómica sin sobrescritura y duración independiente de las pistas de audio/video.
+- PR #13 sigue abierta y en borrador. Sus pruebas no se suman a las 230 de PR #10: son una suite sobre una rama hija.
+- Las pruebas usan fixtures y medios sintéticos; no certifican el equipo ni proveedores reales.
 
-## Etiquetado y reversión
-- Identificador único de release: `BSTUDIO-ELITE-YYYYMMDD-N`.
-- Cambios a `main` mediante revisión y CI aprobada; fusionar solo tras reconciliar la Mac.
-- Despliegue sobre URL existente, nunca mediante una segunda web paralela.
-- Antes de desplegar: snapshot de código, datos, esquemas, trabajos y referencias de proyecto.
-- Después de desplegar: prueba funcional y rollback disponible para restaurar código y datos en caso de regresión.
-- Mantener registro de compilación, hash Git, pruebas, fecha, estado, proveedor y presupuesto.
+## Diagnóstico conectado del estudio
 
-## Estado actual
-**CANDIDATA EN REVISIÓN. NO PUBLICADA.** La candidata PR #10 supera 230 comprobaciones automatizadas de CI. La propuesta hija PR #11 tiene 104 comprobaciones propias, pero sigue separada y requiere reconciliación. La versión local de Mac, los cambios no publicados, las voces existentes, el MP4 PoYo real, el reel real de 35 segundos, la persistencia y el rollback todavía requieren verificación. No fusionar ni desplegar hasta completar todas las puertas críticas.
+Consulta autenticada de solo lectura del 17-nov-2026:
+
+- El único dispositivo registrado es «Mi computador Windows»: emparejado, pero desconectado y sin último contacto.
+- La Mac del estudio no aparece entre los dispositivos registrados.
+- Core: `configured=false`, `selected=false`, `enabled=false`, `gatewayConnected=false`, `inferenceVerified=false`; no hay modelo seleccionado.
+- La narración local gratuita está disponible como capacidad del dispositivo, pero no prueba que el banco de voces del propietario esté conectado.
+- `ownVideoConfigured=false`, `privateVideoReady=false`, `privateSpeechReady=false`.
+- La exportación reportada es montaje en navegador con escenas, narración y movimiento de cámara; no presentarla como generación neuronal.
+
+### Estado de un proyecto observado
+
+El proyecto `d525104e-5f1b-42e3-9328-88c6fb8fef26` («Mis últimas gotas para ti», una copia del dispositivo) actualmente informa:
+
+- 6 escenas, todas `mediaType=image`.
+- `audioReady=true` y `localNarration=true`.
+- `videoPreparation=null`.
+- Estado 80 %, `complete=false`, `final=false`, etapa «Escenas listas · falta montar el video».
+
+Esta lectura es un snapshot del proyecto y muestra un estado no final coherente. No demuestra que el defecto de issue #12 esté corregido en el código ni sustituye una prueba de regresión en la Mac.
+
+## Recuperación PoYo y datos
+
+- La consulta de trabajos de Barriga Studio devuelve estados guardados de trabajos de imagen; no consulta el proveedor PoYo ni incluye el task_id solicitado.
+- Esto no demuestra que la tarea PoYo no exista. La recuperación requiere la Mac y la CLI autenticada en su llavero.
+- El script de PR #13 consulta la misma tarea con `task get`; no usa `submit`. Si la autenticación devuelve 401/403, se detiene sin reintentar generación.
+- No descargar hasta validar host/redirecciones. No atribuir a la tarea un archivo preexistente sin confirmación del proveedor.
+
+## Issue #12 — estado falso de «video listo»
+
+Issue: https://github.com/Elkinbarrigamora-arte/barriga-studio/issues/12
+
+Mantenerlo abierto hasta:
+1. Añadir una prueba de regresión específica para seis imágenes + narración local + ausencia de MP4.
+2. Verificar que el código real nunca emita `complete/final` ni enlace de descarga en ese caso.
+3. Probar la ruta real en la Mac y confirmar que el estado solo cambia a exportado/validado tras existir el archivo.
+
+## Protocolo de Mac, release y rollback
+
+- No ejecutar `git reset --hard`, `git clean -fd`, checkout sobre la carpeta principal ni sobrescribir `index.html`, voces o proyectos.
+- Hacer inventario y snapshot fuera del árbol principal; reconciliar de forma aditiva y revisar diferencias antes de copiar.
+- Mantener el worktree PoYo separado del proyecto principal.
+- Fusionar solo tras revisión, CI completa y todas las puertas reales aprobadas.
+- Desplegar sobre la URL existente `http://127.0.0.1:8766/studio`, nunca como segundo producto.
+- Antes del despliegue: snapshot restaurable de código, datos, proyectos, voces, trabajos y referencias.
+- Después: comprobar URL, controles, persistencia y restauración; conservar rollback funcional.
+
+**Estado final de esta revisión: CANDIDATAS EN BORRADOR. NO FUSIONAR. NO DESPLEGAR. NO GENERAR NI CONSUMIR CRÉDITOS.**
