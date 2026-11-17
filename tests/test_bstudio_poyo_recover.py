@@ -13,7 +13,7 @@ SPEC.loader.exec_module(module)
 
 
 class FakeResponse:
-    def __init__(self, data, url="https://cdn.doculator.org/videos/t.mp4"):
+    def __init__(self, data, url="https://storage.poyo.ai/videos/t.mp4"):
         self.data = data
         self.url = url
         self.pos = 0
@@ -36,28 +36,29 @@ class FakeResponse:
 
 class RecoveryTests(unittest.TestCase):
     def test_json_preserves_full_url(self):
-        url = "https://cdn.doculator.org/videos/0AHQMX2G2T4ZZE6O.mp4?token=abcdef"
+        url = "https://storage.poyo.ai/videos/0AHQMX2G2T4ZZE6O.mp4?token=abcdef"
         task = module.parse_task(json.dumps({"status": "succeeded", "files": [{"file_url": url}]}))
         self.assertEqual(module.find_video_url(task), url)
 
     def test_nested_data(self):
         task = module.parse_task(json.dumps({"code": 200, "data": {
-            "status": "finished", "files": ["https://cdn.doculator.org/x.mp4"]
+            "status": "finished", "files": ["https://storage.poyo.ai/x.mp4"]
         }}))
         self.assertEqual(task["status"], "finished")
 
     def test_wrong_host_rejected(self):
-        for url in ("http://cdn.doculator.org/a.mp4", "https://localhost/a.mp4",
+        for url in ("http://storage.poyo.ai/a.mp4", "https://localhost/a.mp4",
+                    "https://cdn.poyo.ai/a.mp4", "https://cdn.doculator.org/a.mp4",
                     "https://not-poyo.example/a.mp4", "file:///tmp/a.mp4"):
             with self.subTest(url=url), self.assertRaises(ValueError):
                 module.validate_download_url(url)
 
     def test_redirect_rejects_untrusted_host_before_request(self):
         handler = module.MediaRedirectHandler()
-        original = module.Request("https://cdn.doculator.org/start")
+        original = module.Request("https://storage.poyo.ai/start")
         with self.assertRaises(ValueError):
             handler.redirect_request(original, None, 302, "", {}, "https://elsewhere.example/a.mp4")
-        allowed = "https://cdn.poyo.ai/video.mp4"
+        allowed = "https://storage.poyo.ai/video.mp4"
         redirected = handler.redirect_request(original, None, 302, "", {}, allowed)
         self.assertEqual(redirected.full_url, allowed)
 
@@ -71,7 +72,7 @@ class RecoveryTests(unittest.TestCase):
                 return {"duracion_segundos": 5}
 
             size, details = module.save_video(
-                "https://cdn.doculator.org/videos/t.mp4", destination,
+                "https://storage.poyo.ai/videos/t.mp4", destination,
                 opener=lambda *a, **k: FakeResponse(video), probe=probe
             )
             self.assertEqual(size, len(video))
@@ -84,7 +85,7 @@ class RecoveryTests(unittest.TestCase):
             destination = Path(folder) / "video.mp4"
             with self.assertRaisesRegex(RuntimeError, "invalid stream"):
                 module.save_video(
-                    "https://cdn.doculator.org/videos/t.mp4", destination,
+                    "https://storage.poyo.ai/videos/t.mp4", destination,
                     opener=lambda *a, **k: FakeResponse(video),
                     probe=mock.Mock(side_effect=RuntimeError("invalid stream"))
                 )
@@ -99,7 +100,7 @@ class RecoveryTests(unittest.TestCase):
                 return {}
             with self.assertRaises(FileExistsError):
                 module.save_video(
-                    "https://cdn.doculator.org/videos/t.mp4", destination,
+                    "https://storage.poyo.ai/videos/t.mp4", destination,
                     opener=lambda *a, **k: FakeResponse(video), probe=competing_recovery
                 )
             self.assertEqual(destination.read_bytes(), b"previous download")
@@ -119,7 +120,7 @@ class RecoveryTests(unittest.TestCase):
             destination = Path(folder) / "video.mp4"
             with self.assertRaises(ValueError):
                 module.save_video(
-                    "https://cdn.doculator.org/videos/t.mp4", destination,
+                    "https://storage.poyo.ai/videos/t.mp4", destination,
                     opener=lambda *a, **k: FakeResponse(b"<html>not a video</html>")
                 )
             self.assertFalse(destination.exists())
@@ -130,7 +131,7 @@ class RecoveryTests(unittest.TestCase):
             captured.extend(command)
             return mock.Mock(returncode=0, stdout=json.dumps({
                 "status": "succeeded",
-                "files": [{"file_url": "https://cdn.doculator.org/t.mp4"}]
+                "files": [{"file_url": "https://storage.poyo.ai/t.mp4"}]
             }))
         with mock.patch.object(module.shutil, "which", return_value="/usr/bin/npx"):
             data = module.read_existing_task("0AHQMX2G2T4ZZE6O", runner=fake_run)
@@ -152,7 +153,7 @@ class RecoveryTests(unittest.TestCase):
         def mismatched(command, **kwargs):
             return mock.Mock(returncode=0, stdout=json.dumps({
                 "data": {"task_id": "other-task-id", "status": "succeeded",
-                         "files": ["https://cdn.doculator.org/other.mp4"]}
+                         "files": ["https://storage.poyo.ai/other.mp4"]}
             }))
         with mock.patch.object(module.shutil, "which", return_value="/usr/bin/npx"):
             with self.assertRaisesRegex(RuntimeError, "identifica otra tarea"):
